@@ -28,6 +28,7 @@ async function getBase64FromUri(uri: string): Promise<string> {
 
 async function doRequest(uri: string): Promise<string> {
   const contentType = getContentType(uri);
+  const token = Config.HUGGINGFACE_API_TOKEN ?? '';
 
   let body: any;
   if (uri.startsWith('content://') || uri.startsWith('file://')) {
