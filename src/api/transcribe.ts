@@ -1,6 +1,5 @@
 import RNBlobUtil from 'react-native-blob-util';
-// import Config from 'react-native-config';
-const HUGGINGFACE_API_TOKEN = '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';
+import Config from 'react-native-config';
 
 const WHISPER_ENDPOINT =
   'https://api-inference.huggingface.co/models/openai/whisper-large-v2';
@@ -29,7 +28,6 @@ async function getBase64FromUri(uri: string): Promise<string> {
 
 async function doRequest(uri: string): Promise<string> {
   const contentType = getContentType(uri);
-  const token = HUGGINGFACE_API_TOKEN ?? '';
 
   let body: any;
   if (uri.startsWith('content://') || uri.startsWith('file://')) {
