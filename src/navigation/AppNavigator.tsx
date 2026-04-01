@@ -1,6 +1,6 @@
 import React from 'react';
-import { createStackNavigator } from '@react-navigation/stack';
-import { NavigationContainer } from '@react-navigation/native';
+
+import {createStackNavigator} from '@react-navigation/stack';
 
 import SplashScreen from '../screens/SplashScreen';
 import HomeScreen from '../screens/HomeScreen';
@@ -12,7 +12,7 @@ import ResultScreen from '../screens/ResultScreen';
 export type RootStackParamList = {
   Splash: undefined;
   Home: undefined;
-  Processing: { audioUri: string; audioDuration: number };
+  Processing: {audioUri: string; audioDuration: number};
   History: undefined;
   Settings: undefined;
   Result: {
@@ -25,41 +25,17 @@ export type RootStackParamList = {
 
 const Stack = createStackNavigator<RootStackParamList>();
 
-export default function AppNavigator() {
+export default function AppNavigator(): React.JSX.Element {
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName="Splash">
-        <Stack.Screen
-          name="Splash"
-          component={SplashScreen}
-          options={{ headerShown: false, gestureEnabled: false }}
-        />
-        <Stack.Screen
-          name="Home"
-          component={HomeScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Processing"
-          component={ProcessingScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="History"
-          component={HistoryScreen}
-          options={{ title: 'History', headerBackTitle: 'Back' }}
-        />
-        <Stack.Screen
-          name="Settings"
-          component={SettingsScreen}
-          options={{ title: 'Settings', headerBackTitle: 'Back' }}
-        />
-        <Stack.Screen
-          name="Result"
-          component={ResultScreen}
-          options={{ title: 'Result', headerBackTitle: 'Back' }}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <Stack.Navigator
+      initialRouteName="Splash"
+      screenOptions={{headerShown: false}}>
+      <Stack.Screen name="Splash" component={SplashScreen} />
+      <Stack.Screen name="Home" component={HomeScreen} />
+      <Stack.Screen name="Processing" component={ProcessingScreen} />
+      <Stack.Screen name="History" component={HistoryScreen} />
+      <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen name="Result" component={ResultScreen} />
+    </Stack.Navigator>
   );
 }

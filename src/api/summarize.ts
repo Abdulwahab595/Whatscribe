@@ -24,7 +24,7 @@ function fallback(transcript: string): SummaryResult {
     .map(s => s.trim())
     .filter(Boolean);
   const bullets = sentences.slice(0, 3);
-  return { bullets, readSeconds: 5 };
+  return {bullets, readSeconds: 5};
 }
 
 function parseJson(raw: string): SummaryResult | null {
@@ -39,14 +39,14 @@ function parseJson(raw: string): SummaryResult | null {
   if (!match) return null;
 
   try {
-    const parsed: { bullets: string[]; readSeconds: number } = JSON.parse(
+    const parsed: {bullets: string[]; readSeconds: number} = JSON.parse(
       match[0],
     );
     if (
       Array.isArray(parsed.bullets) &&
       typeof parsed.readSeconds === 'number'
     ) {
-      return { bullets: parsed.bullets, readSeconds: parsed.readSeconds };
+      return {bullets: parsed.bullets, readSeconds: parsed.readSeconds};
     }
     return null;
   } catch {
@@ -57,9 +57,9 @@ function parseJson(raw: string): SummaryResult | null {
 export async function summarize(transcript: string): Promise<SummaryResult> {
   try {
     const token = Config.HUGGINGFACE_API_TOKEN ?? '';
-    const response = await axios.post<{ generated_text: string }[]>(
+    const response = await axios.post<{generated_text: string}[]>(
       SUMMARIZE_ENDPOINT,
-      { inputs: buildPrompt(transcript) },
+      {inputs: buildPrompt(transcript)},
       {
         headers: {
           Authorization: `Bearer ${token}`,
