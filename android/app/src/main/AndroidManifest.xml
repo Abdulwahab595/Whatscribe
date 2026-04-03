@@ -21,6 +21,16 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
+
+      </activity>
+      <activity
+        android:name=".ShareActivity"
+        android:theme="@style/ShareActivityTheme"
+        android:launchMode="singleTask"
+        android:exported="true"
+        android:excludeFromRecents="true"
+        android:taskAffinity=""
+        android:windowSoftInputMode="adjustResize">
         <intent-filter>
             <action android:name="android.intent.action.SEND" />
             <category android:name="android.intent.category.DEFAULT" />

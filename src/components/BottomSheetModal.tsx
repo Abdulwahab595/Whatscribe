@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
+  NativeModules,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -21,6 +22,8 @@ import WavyIcon from './WavyIcon';
 import DotsLoader from './DotsLoader';
 import BulletPoints from './BulletPoints';
 import TranscriptDropdown from './TranscriptDropdown';
+import Sound from 'react-native-sound';
+import RNBlobUtil from 'react-native-blob-util';
 import { transcribe } from '../api/transcribe';
 import { summarize } from '../api/summarize';
 import { formatDuration } from '../utils/formatDuration';
@@ -32,8 +35,9 @@ import type { RootStackParamList } from '../navigation/AppNavigator';
 interface BottomSheetModalProps {
   visible: boolean;
   onClose: () => void;
-  audioUri: string;
+  audioUri: string | null;
   audioDuration: number;
+  mimeType?: string | null;
 }
 
 type State = 'processing' | 'retrying' | 'result' | 'error';
@@ -43,6 +47,7 @@ export default function BottomSheetModal({
   onClose,
   audioUri,
   audioDuration,
+  mimeType,
 }: BottomSheetModalProps) {
   const navigation =
     useNavigation<StackNavigationProp<RootStackParamList>>();
@@ -53,7 +58,8 @@ export default function BottomSheetModal({
   const [readSeconds, setReadSeconds] = useState(5);
   const [errorMsg, setErrorMsg] = useState('');
   const [limitModalVisible, setLimitModalVisible] = useState(false);
-
+  const [realDuration, setRealDuration] = useState(audioDuration);
+  console.log("Duration:", realDuration)
   const resultOpacity = useSharedValue(0);
   const resultStyle = useAnimatedStyle(() => ({ opacity: resultOpacity.value }));
 
@@ -82,22 +88,43 @@ export default function BottomSheetModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
+  async function getAudioDuration(uri: string): Promise<number> {
+    console.log('--- Native Duration Detection ---');
+    try {
+      const duration = await NativeModules.DurationModule.getDuration(uri);
+      console.log('Native Detected Duration:', duration);
+      return duration;
+    } catch (e) {
+      console.log('Native duration detection failed:', e);
+      return 0;
+    }
+  }
+
   async function runTranscription() {
     try {
+      if (!audioUri) throw new Error("No audio URI provided.");
       setState('processing');
-      const text = await transcribe(audioUri, () => setState('retrying'));
+
+      // Get real duration if it's 0 (Shared from WhatsApp)
+      let duration = realDuration;
+      if (duration === 0) {
+        duration = await getAudioDuration(audioUri);
+        setRealDuration(duration);
+      }
+
+      const text = await transcribe(audioUri, mimeType, () => setState('retrying'));
       setTranscript(text);
 
       const summary = await summarize(text);
       setBullets(summary.bullets);
       setReadSeconds(summary.readSeconds);
 
-      addUsage(audioDuration);
+      addUsage(duration);
 
       await saveEntry({
         id: `${Date.now()}`,
         audioUri,
-        duration: audioDuration,
+        duration: duration,
         transcript: text,
         bullets: summary.bullets,
         readSeconds: summary.readSeconds,
@@ -154,7 +181,11 @@ export default function BottomSheetModal({
               onPress={() => {
                 setLimitModalVisible(false);
                 onClose();
-                navigation.navigate('Settings');
+                try {
+                  navigation.navigate('Settings');
+                } catch (e) {
+                  // Silent fail in contexts where 'Settings' doesn't exist
+                }
               }}>
               <Text style={styles.limitButtonText}>View Plans</Text>
             </TouchableOpacity>
@@ -185,12 +216,14 @@ export default function BottomSheetModal({
                 <Text style={styles.processingTitle}>
                   Understanding voice note
                 </Text>
-                <Text style={styles.processingSubtitle}>
-                  {state === 'retrying'
-                    ? 'Model is warming up, retrying...'
-                    : 'Transcribing & summarizing...'}
-                </Text>
-                <DotsLoader />
+                <View style={styles.loadingRow}>
+                  <Text style={styles.processingSubtitle}>
+                    {state === 'retrying'
+                      ? 'Model is warming up, retrying'
+                      : 'Transcribing &  summarizing'}
+                  </Text>
+                  <DotsLoader />
+                </View>
                 <WavyIcon isAnimating size={88} />
               </View>
             )}
@@ -209,7 +242,7 @@ export default function BottomSheetModal({
               <Animated.View style={[styles.resultContent, resultStyle]}>
                 <Text style={styles.resultTitle}>Voice Note Summary</Text>
                 <Text style={styles.resultMeta}>
-                  ⏱ {formatDuration(audioDuration)} voice note • Read in{' '}
+                  ⏱ {formatDuration(realDuration)} voice note • Read in{' '}
                   {readSeconds} sec
                 </Text>
                 <BulletPoints bullets={bullets} />
@@ -218,9 +251,7 @@ export default function BottomSheetModal({
                   <TouchableOpacity style={styles.actionBtn} onPress={handleCopy}>
                     <Text style={styles.actionText}>Copy</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionBtn} onPress={handleReply}>
-                    <Text style={styles.actionText}>Reply</Text>
-                  </TouchableOpacity>
+
                   <TouchableOpacity style={styles.actionBtn} onPress={handleShare}>
                     <Text style={styles.actionText}>Share</Text>
                   </TouchableOpacity>
@@ -260,6 +291,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 24,
     gap: 16,
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   processingTitle: {
     fontSize: 20,
