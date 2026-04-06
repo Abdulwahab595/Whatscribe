@@ -1,9 +1,14 @@
 import RNBlobUtil from 'react-native-blob-util';
+import RNFS from 'react-native-fs';
+import Config from 'react-native-config';
 
-// Using a fresh endpoint with cache-busting to ensure we don't get old looping results
 const WHISPER_ENDPOINT =
-  'https://api-inference.huggingface.co/models/openai/whisper-large-v3-turbo?language=pa&task=transcribe';
-const HUGGINGFACE_API_TOKEN='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';
+  'https://router.huggingface.co/hf-inference/models/openai/whisper-large-v3-turbo';
+const HUGGINGFACE_API_TOKEN = Config.HUGGINGFACE_API_TOKEN;
+console.log(
+  'Token loaded:',
+  HUGGINGFACE_API_TOKEN ? 'YES' : 'NO — .env not loaded!',
+);
 
 function getContentType(uri: string): string {
   const lower = uri.toLowerCase();
@@ -11,65 +16,103 @@ function getContentType(uri: string): string {
   if (lower.endsWith('.mp3')) return 'audio/mpeg';
   if (lower.endsWith('.flac')) return 'audio/flac';
   if (lower.endsWith('.wav')) return 'audio/wav';
-  return 'audio/ogg'; 
+  return 'audio/ogg';
 }
 
-async function doRequest(uri: string, mimeType?: string | null): Promise<string> {
+async function resolveToLocalPath(
+  uri: string,
+  mimeType?: string | null,
+): Promise<{path: string; isTemp: boolean}> {
+  if (!uri) throw new Error('Audio URI is null or undefined');
+  if (uri.startsWith('content://')) {
+    const ext =
+      mimeType?.includes('mp4') || mimeType?.includes('m4a')
+        ? 'm4a'
+        : mimeType?.includes('mpeg')
+        ? 'mp3'
+        : mimeType?.includes('flac')
+        ? 'flac'
+        : mimeType?.includes('wav')
+        ? 'wav'
+        : 'ogg';
+    const tempPath = `${
+      RNFS.CachesDirectoryPath
+    }/temp_audio_${Date.now()}.${ext}`;
+    await RNFS.copyFile(uri, tempPath);
+    return {path: tempPath, isTemp: true};
+  }
+  return {path: uri.replace('file://', ''), isTemp: false};
+}
+
+async function doRequest(
+  uri: string,
+  mimeType?: string | null,
+): Promise<string> {
+  if (!uri)
+    throw new Error('Audio URI is null or undefined — no file was shared');
   const contentType = (mimeType || getContentType(uri)).split(';')[0].trim();
   const token = HUGGINGFACE_API_TOKEN ?? '';
-  const cleanUri = uri.replace('file://', '');
 
   console.log('--- Transcription Debug (Pure Native) ---');
   console.log('URI:', uri);
   console.log('Content-Type:', contentType);
 
+  const {path: localPath, isTemp} = await resolveToLocalPath(uri, mimeType);
+  console.log('Local Path:', localPath);
+
   try {
-    // Reverting to the very first method that successfully sent files
-    // But adding strict cache-control to prevent the memory-heavy loop crashes
+    // Send raw binary audio — HuggingFace router expects binary body, not base64 JSON
     const response = await RNBlobUtil.fetch(
       'POST',
-      `${WHISPER_ENDPOINT}&v=${Date.now()}`, // Cache-buster
+      WHISPER_ENDPOINT,
       {
         Authorization: `Bearer ${token}`,
         'Content-Type': contentType,
         'x-wait-for-model': 'true',
-        'x-use-cache': 'false', // Ensure fresh results
+        'x-use-cache': 'false',
       },
-      RNBlobUtil.wrap(cleanUri),
+      RNBlobUtil.wrap(localPath),
     );
 
     const status = response.respInfo.status;
-    console.log('Status Code:', status);
-
-    // If status is not 200, it's likely a cold start (503)
-    if (status === 503) return '__RETRY__';
-
-    let json: any = {};
+    const responseText = await response.text();
+    let data: any = {};
     try {
-      json = response.json();
-    } catch (e) {
-      console.log('Failed to parse response JSON');
+      data = JSON.parse(responseText);
+    } catch {
+      data = {error: responseText};
+    }
+    console.log('Status Code:', status);
+    console.log('Response:', JSON.stringify(data).slice(0, 200));
+
+    if (status === 503 || data?.error?.toLowerCase?.().includes('loading')) {
+      return '__RETRY__';
     }
 
-    if (status < 200 || status >= 300) {
-      const detail = json.error || json.message || 'Unknown error';
+    if (status < 200 || status >= 300 || data?.error) {
+      const detail = data?.error || data?.message || 'Unknown error';
       throw new Error(`Transcription failed (${status}): ${detail}`);
     }
 
-    if (!json.text) {
+    if (!data?.text) {
       throw new Error('No transcript returned from AI');
     }
 
-    const rawTranscript = json.text.trim();
+    const rawTranscript = data.text.trim();
     console.log('--- Raw Whisper Transcript ---');
     console.log(rawTranscript);
     console.log('------------------------------');
 
     return rawTranscript;
   } catch (err) {
-    if (err instanceof Error && err.message.includes('__RETRY__')) return '__RETRY__';
+    if (err instanceof Error && err.message.includes('__RETRY__'))
+      return '__RETRY__';
     console.log('Transcription Error:', err);
     throw err;
+  } finally {
+    if (isTemp) {
+      RNFS.unlink(localPath).catch(() => {});
+    }
   }
 }
 
