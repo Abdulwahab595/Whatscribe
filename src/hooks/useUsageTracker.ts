@@ -1,10 +1,11 @@
-import { MMKV } from 'react-native-mmkv';
+import {MMKV} from 'react-native-mmkv';
 
 const storage = new MMKV();
 
 const USAGE_SECONDS_KEY = 'usage_seconds';
 const PLAN_TYPE_KEY = 'plan_type';
-const FREE_LIMIT = 180;
+const LANGUAGE_KEY = 'transcription_language';
+const FREE_LIMIT = 99999; // TODO: set back to 180 before release
 
 export function getRemainingSeconds(): number {
   const used = storage.getNumber(USAGE_SECONDS_KEY) ?? 0;
@@ -18,7 +19,9 @@ export function addUsage(seconds: number): void {
 
 export function isFreeLimitReached(): boolean {
   const used = storage.getNumber(USAGE_SECONDS_KEY) ?? 0;
-  const plan = (storage.getString(PLAN_TYPE_KEY) ?? 'free') as 'free' | 'premium';
+  const plan = (storage.getString(PLAN_TYPE_KEY) ?? 'free') as
+    | 'free'
+    | 'premium';
   return used >= FREE_LIMIT && plan === 'free';
 }
 
@@ -36,4 +39,13 @@ export function resetUsage(): void {
 
 export function getUsageSeconds(): number {
   return storage.getNumber(USAGE_SECONDS_KEY) ?? 0;
+}
+
+// 'auto' = let Whisper detect, or a BCP-47 code like 'ur', 'en', 'ar'
+export function getLanguagePreference(): string {
+  return storage.getString(LANGUAGE_KEY) ?? 'auto';
+}
+
+export function setLanguagePreference(lang: string): void {
+  storage.set(LANGUAGE_KEY, lang);
 }

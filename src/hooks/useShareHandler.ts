@@ -1,5 +1,8 @@
-import { useEffect, useState } from 'react';
-import ShareMenu, { ShareCallback, ShareMenuReactView } from 'react-native-share-menu';
+import {useEffect, useState} from 'react';
+import ShareMenu, {
+  ShareCallback,
+  ShareMenuReactView,
+} from 'react-native-share-menu';
 
 export interface SharedItem {
   mimeType: string;
@@ -11,8 +14,8 @@ export function useShareHandler() {
   const [sharedItem, setSharedItem] = useState<SharedItem | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
 
-  const handleShare: ShareCallback = (item) => {
-    if (!item) return;
+  const handleShare: ShareCallback = item => {
+    if (!item || !item.data) return;
     setSharedItem({
       mimeType: item.mimeType,
       data: item.data as string,
@@ -30,5 +33,5 @@ export function useShareHandler() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { sharedItem, modalVisible, setModalVisible };
+  return {sharedItem, modalVisible, setModalVisible};
 }

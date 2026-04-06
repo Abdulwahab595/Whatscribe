@@ -1,21 +1,21 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, {useState} from 'react';
+import {View, Text, TouchableOpacity, StyleSheet} from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
-  runOnJS,
 } from 'react-native-reanimated';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import colors from '../theme/colors';
 
 interface TranscriptDropdownProps {
-  transcript: string;
+  summary: string;
 }
 
 const COLLAPSED_HEIGHT = 0;
 const EXPANDED_HEIGHT = 200;
 
-export default function TranscriptDropdown({ transcript }: TranscriptDropdownProps) {
+export default function TranscriptDropdown({summary}: TranscriptDropdownProps) {
   const [expanded, setExpanded] = useState(false);
   const animHeight = useSharedValue(COLLAPSED_HEIGHT);
 
@@ -36,11 +36,16 @@ export default function TranscriptDropdown({ transcript }: TranscriptDropdownPro
     <View style={styles.container}>
       <TouchableOpacity onPress={toggle} style={styles.toggle}>
         <Text style={styles.toggleText}>
-          {expanded ? 'Hide transcript ∧' : 'Show full transcript ∨'}
+          {expanded ? 'Hide transcript' : 'Show full transcript'}
         </Text>
+        <Ionicons
+          name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'}
+          size={16}
+          color={colors.textSecondary}
+        />
       </TouchableOpacity>
       <Animated.View style={animStyle}>
-        <Text style={styles.transcriptText}>{transcript}</Text>
+        <Text style={styles.transcriptText}>{summary}</Text>
       </Animated.View>
     </View>
   );
@@ -53,12 +58,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   toggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: 8,
+    gap: 6,
   },
   toggleText: {
     fontSize: 14,
-    color: colors.primaryBlue,
-    fontWeight: '600',
+    color: colors.textSecondary,
+    fontWeight: '500',
   },
   transcriptText: {
     fontSize: 14,

@@ -1,24 +1,23 @@
-import React, { useState, useCallback } from 'react';
+import React, {useState, useCallback} from 'react';
+import {View, Text, FlatList, TouchableOpacity, StyleSheet} from 'react-native';
+import {useNavigation, useFocusEffect} from '@react-navigation/native';
+import type {StackNavigationProp} from '@react-navigation/stack';
 import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-} from 'react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import type { StackNavigationProp } from '@react-navigation/stack';
-import { getAllEntries, deleteEntry, type HistoryEntry } from '../store/historyStore';
-import { formatDuration } from '../utils/formatDuration';
+  getAllEntries,
+  deleteEntry,
+  type HistoryEntry,
+} from '../store/historyStore';
+import {formatDuration} from '../utils/formatDuration';
+import CustomAlert, {useCustomAlert} from '../components/CustomAlert';
 import colors from '../theme/colors';
-import type { RootStackParamList } from '../navigation/AppNavigator';
+import type {RootStackParamList} from '../navigation/AppNavigator';
 
 type Nav = StackNavigationProp<RootStackParamList, 'History'>;
 
 export default function HistoryScreen() {
   const navigation = useNavigation<Nav>();
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
+  const {config: alertConfig, showAlert, hideAlert} = useCustomAlert();
 
   const load = useCallback(async () => {
     const data = await getAllEntries();
@@ -32,8 +31,8 @@ export default function HistoryScreen() {
   );
 
   async function handleDelete(id: string) {
-    Alert.alert('Delete', 'Remove this transcription?', [
-      { text: 'Cancel', style: 'cancel' },
+    showAlert('Delete', 'Remove this transcription?', [
+      {text: 'Cancel', style: 'cancel'},
       {
         text: 'Delete',
         style: 'destructive',
@@ -45,7 +44,7 @@ export default function HistoryScreen() {
     ]);
   }
 
-  function renderItem({ item }: { item: HistoryEntry }) {
+  function renderItem({item}: {item: HistoryEntry}) {
     const preview = item.bullets[0] ?? item.transcript.slice(0, 60);
     const date = new Date(item.createdAt).toLocaleDateString();
 
@@ -87,6 +86,7 @@ export default function HistoryScreen() {
           <Text style={styles.emptyText}>No transcriptions yet</Text>
         }
       />
+      <CustomAlert config={alertConfig} onDismiss={hideAlert} />
     </View>
   );
 }

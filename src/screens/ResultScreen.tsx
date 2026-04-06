@@ -5,39 +5,33 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Alert,
 } from 'react-native';
-import { useRoute, type RouteProp } from '@react-navigation/native';
+import {useRoute, type RouteProp} from '@react-navigation/native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import Share from 'react-native-share';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import BulletPoints from '../components/BulletPoints';
 import TranscriptDropdown from '../components/TranscriptDropdown';
-import { formatDuration } from '../utils/formatDuration';
+import {formatDuration} from '../utils/formatDuration';
+import {showToast} from '../utils/toast';
 import colors from '../theme/colors';
-import type { RootStackParamList } from '../navigation/AppNavigator';
+import type {RootStackParamList} from '../navigation/AppNavigator';
 
 type Route = RouteProp<RootStackParamList, 'Result'>;
 
 export default function ResultScreen() {
   const route = useRoute<Route>();
-  const { transcript, bullets, readSeconds, audioDuration } = route.params;
+  const {transcript, bullets, fullSummary, readSeconds, audioDuration} =
+    route.params;
 
   function handleCopy() {
     Clipboard.setString(transcript);
-    Alert.alert('Copied', 'Transcript copied to clipboard');
-  }
-
-  async function handleReply() {
-    try {
-      await Share.open({ message: transcript, title: 'Voice note reply' });
-    } catch {
-      // user cancelled
-    }
+    showToast('Copied to clipboard');
   }
 
   async function handleShare() {
     try {
-      await Share.open({ message: transcript });
+      await Share.open({message: transcript});
     } catch {
       // user cancelled
     }
@@ -51,16 +45,22 @@ export default function ResultScreen() {
       </Text>
 
       <BulletPoints bullets={bullets} />
-      <TranscriptDropdown transcript={transcript} />
+      <TranscriptDropdown summary={fullSummary} />
 
-      <View style={styles.actionRow}>
-        <TouchableOpacity style={styles.actionBtn} onPress={handleCopy}>
+      <View style={styles.actionBar}>
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={handleCopy}
+          activeOpacity={0.7}>
+          <Ionicons name="copy-outline" size={20} color={colors.textPrimary} />
           <Text style={styles.actionText}>Copy</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtn} onPress={handleReply}>
-          <Text style={styles.actionText}>Reply</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtn} onPress={handleShare}>
+        <View style={styles.actionDivider} />
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={handleShare}
+          activeOpacity={0.7}>
+          <Ionicons name="share-outline" size={20} color={colors.textPrimary} />
           <Text style={styles.actionText}>Share</Text>
         </TouchableOpacity>
       </View>
@@ -90,19 +90,29 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 8,
   },
-  actionRow: {
+  actionBar: {
     flexDirection: 'row',
-    justifyContent: 'space-evenly',
     alignSelf: 'stretch',
-    marginTop: 24,
+    marginTop: 28,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   actionBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    gap: 7,
+  },
+  actionDivider: {
+    width: 1,
+    backgroundColor: colors.border,
+    marginVertical: 10,
   },
   actionText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
-    color: colors.primaryBlue,
+    color: colors.textPrimary,
   },
 });

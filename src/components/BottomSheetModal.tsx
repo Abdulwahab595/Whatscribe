@@ -1,13 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {
   Modal,
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   NativeModules,
 } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -15,8 +15,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import Clipboard from '@react-native-clipboard/clipboard';
 import Share from 'react-native-share';
-import { useNavigation } from '@react-navigation/native';
-import type { StackNavigationProp } from '@react-navigation/stack';
+import {useNavigation} from '@react-navigation/native';
+import type {StackNavigationProp} from '@react-navigation/stack';
 
 import WavyIcon from './WavyIcon';
 import DotsLoader from './DotsLoader';
@@ -24,13 +24,14 @@ import BulletPoints from './BulletPoints';
 import TranscriptDropdown from './TranscriptDropdown';
 import Sound from 'react-native-sound';
 import RNBlobUtil from 'react-native-blob-util';
-import { transcribe } from '../api/transcribe';
-import { summarize } from '../api/summarize';
-import { formatDuration } from '../utils/formatDuration';
-import { isFreeLimitReached, addUsage } from '../hooks/useUsageTracker';
-import { saveEntry } from '../store/historyStore';
+import {transcribe} from '../api/transcribe';
+import {summarize} from '../api/summarize';
+import {formatDuration} from '../utils/formatDuration';
+import {isFreeLimitReached, addUsage} from '../hooks/useUsageTracker';
+import {saveEntry} from '../store/historyStore';
 import colors from '../theme/colors';
-import type { RootStackParamList } from '../navigation/AppNavigator';
+import {showToast} from '../utils/toast';
+import type {RootStackParamList} from '../navigation/AppNavigator';
 
 interface BottomSheetModalProps {
   visible: boolean;
@@ -40,7 +41,7 @@ interface BottomSheetModalProps {
   mimeType?: string | null;
 }
 
-type State = 'processing' | 'retrying' | 'result' | 'error';
+type State = 'processing' | 'retrying' | 'transcribed' | 'result' | 'error';
 
 export default function BottomSheetModal({
   visible,
@@ -49,19 +50,19 @@ export default function BottomSheetModal({
   audioDuration,
   mimeType,
 }: BottomSheetModalProps) {
-  const navigation =
-    useNavigation<StackNavigationProp<RootStackParamList>>();
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
 
   const [state, setState] = useState<State>('processing');
   const [transcript, setTranscript] = useState('');
   const [bullets, setBullets] = useState<string[]>([]);
+  const [fullSummary, setFullSummary] = useState('');
   const [readSeconds, setReadSeconds] = useState(5);
   const [errorMsg, setErrorMsg] = useState('');
   const [limitModalVisible, setLimitModalVisible] = useState(false);
   const [realDuration, setRealDuration] = useState(audioDuration);
-  console.log("Duration:", realDuration)
+  console.log('Duration:', realDuration);
   const resultOpacity = useSharedValue(0);
-  const resultStyle = useAnimatedStyle(() => ({ opacity: resultOpacity.value }));
+  const resultStyle = useAnimatedStyle(() => ({opacity: resultOpacity.value}));
 
   const hasStarted = useRef(false);
 
@@ -70,6 +71,7 @@ export default function BottomSheetModal({
       setState('processing');
       setTranscript('');
       setBullets([]);
+      setFullSummary('');
       setErrorMsg('');
       resultOpacity.value = 0;
       hasStarted.current = false;
@@ -102,7 +104,7 @@ export default function BottomSheetModal({
 
   async function runTranscription() {
     try {
-      if (!audioUri) throw new Error("No audio URI provided.");
+      if (!audioUri) throw new Error('No audio URI provided.');
       setState('processing');
 
       // Get real duration if it's 0 (Shared from WhatsApp)
@@ -112,11 +114,15 @@ export default function BottomSheetModal({
         setRealDuration(duration);
       }
 
-      const text = await transcribe(audioUri, mimeType, () => setState('retrying'));
+      const text = await transcribe(audioUri, mimeType, () =>
+        setState('retrying'),
+      );
       setTranscript(text);
+      setState('transcribed');
 
       const summary = await summarize(text);
       setBullets(summary.bullets);
+      setFullSummary(summary.fullSummary);
       setReadSeconds(summary.readSeconds);
 
       addUsage(duration);
@@ -127,11 +133,12 @@ export default function BottomSheetModal({
         duration: duration,
         transcript: text,
         bullets: summary.bullets,
+        fullSummary: summary.fullSummary,
         readSeconds: summary.readSeconds,
         createdAt: new Date().toISOString(),
       });
 
-      resultOpacity.value = withTiming(1, { duration: 400 });
+      resultOpacity.value = withTiming(1, {duration: 400});
       setState('result');
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Transcription failed';
@@ -142,20 +149,12 @@ export default function BottomSheetModal({
 
   function handleCopy() {
     Clipboard.setString(transcript);
-    Alert.alert('Copied', 'Transcript copied to clipboard');
-  }
-
-  async function handleReply() {
-    try {
-      await Share.open({ message: transcript, title: 'Voice note reply' });
-    } catch {
-      // user cancelled — ignore
-    }
+    showToast('Copied to clipboard');
   }
 
   async function handleShare() {
     try {
-      await Share.open({ message: transcript });
+      await Share.open({message: transcript});
     } catch {
       // user cancelled — ignore
     }
@@ -228,11 +227,28 @@ export default function BottomSheetModal({
               </View>
             )}
 
+            {state === 'transcribed' && (
+              <View style={styles.resultContent}>
+                <Text style={styles.resultTitle}>Transcription done</Text>
+                <View style={styles.transcriptPreviewBox}>
+                  <Text style={styles.transcriptPreviewText} numberOfLines={5}>
+                    {transcript}
+                  </Text>
+                </View>
+                <View style={[styles.loadingRow, {marginTop: 12}]}>
+                  <Text style={styles.processingSubtitle}>Summarizing</Text>
+                  <DotsLoader />
+                </View>
+              </View>
+            )}
+
             {state === 'error' && (
               <View style={styles.centerContent}>
                 <Text style={styles.processingTitle}>Something went wrong</Text>
                 <Text style={styles.processingSubtitle}>{errorMsg}</Text>
-                <TouchableOpacity style={styles.retryBtn} onPress={runTranscription}>
+                <TouchableOpacity
+                  style={styles.retryBtn}
+                  onPress={runTranscription}>
                   <Text style={styles.retryText}>Try Again</Text>
                 </TouchableOpacity>
               </View>
@@ -246,13 +262,29 @@ export default function BottomSheetModal({
                   {readSeconds} sec
                 </Text>
                 <BulletPoints bullets={bullets} />
-                <TranscriptDropdown transcript={transcript} />
-                <View style={styles.actionRow}>
-                  <TouchableOpacity style={styles.actionBtn} onPress={handleCopy}>
+                <TranscriptDropdown summary={fullSummary} />
+                <View style={styles.actionBar}>
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={handleCopy}
+                    activeOpacity={0.7}>
+                    <Ionicons
+                      name="copy-outline"
+                      size={20}
+                      color={colors.textPrimary}
+                    />
                     <Text style={styles.actionText}>Copy</Text>
                   </TouchableOpacity>
-
-                  <TouchableOpacity style={styles.actionBtn} onPress={handleShare}>
+                  <View style={styles.actionDivider} />
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={handleShare}
+                    activeOpacity={0.7}>
+                    <Ionicons
+                      name="share-outline"
+                      size={20}
+                      color={colors.textPrimary}
+                    />
                     <Text style={styles.actionText}>Share</Text>
                   </TouchableOpacity>
                 </View>
@@ -325,20 +357,30 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 8,
   },
-  actionRow: {
+  actionBar: {
     flexDirection: 'row',
-    justifyContent: 'space-evenly',
     alignSelf: 'stretch',
     marginTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   actionBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    gap: 7,
+  },
+  actionDivider: {
+    width: 1,
+    backgroundColor: colors.border,
+    marginVertical: 10,
   },
   actionText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
-    color: colors.primaryBlue,
+    color: colors.textPrimary,
   },
   retryBtn: {
     paddingVertical: 12,
@@ -363,7 +405,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 28,
     marginHorizontal: 32,
-    alignItems: 'center',
+    width: '80%',
   },
   limitTitle: {
     fontSize: 18,
@@ -383,7 +425,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryBlue,
     borderRadius: 12,
     height: 52,
-    width: '100%',
+    alignSelf: 'stretch',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
@@ -393,8 +435,23 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 16,
   },
+  transcriptPreviewBox: {
+    alignSelf: 'stretch',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+    marginTop: 12,
+  },
+  transcriptPreviewText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
   limitDismiss: {
     fontSize: 14,
     color: colors.textSecondary,
+    textAlign: 'center',
+    paddingVertical: 8,
   },
 });

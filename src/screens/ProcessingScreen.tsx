@@ -1,33 +1,33 @@
-import React, { useState, useCallback } from 'react';
+import React, {useState, useCallback} from 'react';
+import {View, Text, StyleSheet, TouchableOpacity} from 'react-native';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-} from 'react-native';
-import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
-import type { StackNavigationProp } from '@react-navigation/stack';
+  useNavigation,
+  useRoute,
+  type RouteProp,
+} from '@react-navigation/native';
+import type {StackNavigationProp} from '@react-navigation/stack';
 import WavyIcon from '../components/WavyIcon';
 import DotsLoader from '../components/DotsLoader';
-import { transcribe } from '../api/transcribe';
-import { summarize } from '../api/summarize';
-import { formatDuration } from '../utils/formatDuration';
-import { isFreeLimitReached, addUsage } from '../hooks/useUsageTracker';
-import { saveEntry } from '../store/historyStore';
+import {transcribe} from '../api/transcribe';
+import {summarize} from '../api/summarize';
+import {formatDuration} from '../utils/formatDuration';
+import {isFreeLimitReached, addUsage} from '../hooks/useUsageTracker';
+import {saveEntry} from '../store/historyStore';
 import colors from '../theme/colors';
-import type { RootStackParamList } from '../navigation/AppNavigator';
+import type {RootStackParamList} from '../navigation/AppNavigator';
 
 type Nav = StackNavigationProp<RootStackParamList, 'Processing'>;
 type Route = RouteProp<RootStackParamList, 'Processing'>;
 
-type State = 'idle' | 'processing' | 'retrying' | 'error';
+type State = 'idle' | 'processing' | 'retrying' | 'summarizing' | 'error';
 
 export default function ProcessingScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
-  const { audioUri, audioDuration } = route.params;
+  const {audioUri, audioDuration} = route.params;
 
   const [state, setState] = useState<State>('idle');
+  const [transcript, setTranscript] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
   const handleTap = useCallback(async () => {
@@ -41,6 +41,8 @@ export default function ProcessingScreen() {
     try {
       setState('processing');
       const text = await transcribe(audioUri, () => setState('retrying'));
+      setTranscript(text);
+      setState('summarizing');
       const summary = await summarize(text);
 
       addUsage(audioDuration);
@@ -51,6 +53,7 @@ export default function ProcessingScreen() {
         duration: audioDuration,
         transcript: text,
         bullets: summary.bullets,
+        fullSummary: summary.fullSummary,
         readSeconds: summary.readSeconds,
         createdAt: new Date().toISOString(),
       });
@@ -58,6 +61,7 @@ export default function ProcessingScreen() {
       navigation.navigate('Result', {
         transcript: text,
         bullets: summary.bullets,
+        fullSummary: summary.fullSummary,
         readSeconds: summary.readSeconds,
         audioDuration,
       });
@@ -68,15 +72,22 @@ export default function ProcessingScreen() {
     }
   }, [audioUri, audioDuration, navigation, state]);
 
-  const isRunning = state === 'processing' || state === 'retrying';
+  const isRunning =
+    state === 'processing' || state === 'retrying' || state === 'summarizing';
 
   return (
     <View style={styles.container}>
       <Text style={styles.heading}>Voice note received</Text>
 
       <View style={styles.card}>
-        <TouchableOpacity onPress={handleTap} activeOpacity={0.8} disabled={isRunning}>
-          <WavyIcon isAnimating={isRunning} size={88} />
+        <TouchableOpacity
+          onPress={handleTap}
+          activeOpacity={0.8}
+          disabled={isRunning}>
+          <WavyIcon
+            isAnimating={state === 'processing' || state === 'retrying'}
+            size={88}
+          />
         </TouchableOpacity>
 
         <Text style={styles.cardTitle}>Voice note received</Text>
@@ -87,7 +98,7 @@ export default function ProcessingScreen() {
           </Text>
         )}
 
-        {isRunning && (
+        {(state === 'processing' || state === 'retrying') && (
           <View style={styles.loaderRow}>
             <DotsLoader />
             <Text style={styles.loadingLabel}>
@@ -96,6 +107,20 @@ export default function ProcessingScreen() {
                 : 'Transcribing...'}
             </Text>
           </View>
+        )}
+
+        {state === 'summarizing' && (
+          <>
+            <View style={styles.transcriptBox}>
+              <Text style={styles.transcriptText} numberOfLines={4}>
+                {transcript}
+              </Text>
+            </View>
+            <View style={styles.loaderRow}>
+              <DotsLoader />
+              <Text style={styles.loadingLabel}>Summarizing...</Text>
+            </View>
+          </>
         )}
 
         {state === 'idle' && (
@@ -185,5 +210,19 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontWeight: '600',
     fontSize: 14,
+  },
+  transcriptBox: {
+    alignSelf: 'stretch',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 10,
+    marginTop: 16,
+    marginBottom: 4,
+  },
+  transcriptText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 18,
   },
 });
