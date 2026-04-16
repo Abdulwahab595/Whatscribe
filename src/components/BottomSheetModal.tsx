@@ -27,7 +27,7 @@ import RNBlobUtil from 'react-native-blob-util';
 import {transcribe} from '../api/transcribe';
 import {summarize} from '../api/summarize';
 import {formatDuration} from '../utils/formatDuration';
-import {isFreeLimitReached, addUsage} from '../hooks/useUsageTracker';
+import {addUsage, getLanguagePreference, getRemainingSeconds} from '../hooks/useUsageTracker';
 import {saveEntry} from '../store/historyStore';
 import colors from '../theme/colors';
 import {showToast} from '../utils/toast';
@@ -81,10 +81,8 @@ export default function BottomSheetModal({
     if (hasStarted.current) return;
     hasStarted.current = true;
 
-    if (isFreeLimitReached()) {
-      setLimitModalVisible(true);
-      return;
-    }
+    // Limit check is moved to runTranscription because we need to know the exact duration first
+
 
     runTranscription();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -114,13 +112,24 @@ export default function BottomSheetModal({
         setRealDuration(duration);
       }
 
-      const text = await transcribe(audioUri, mimeType, () =>
-        setState('retrying'),
+      if (getRemainingSeconds(duration) <= 0) {
+        setLimitModalVisible(true);
+        setState('error');
+        return;
+      }
+
+      const langCode = getLanguagePreference();
+      const text = await transcribe(
+        audioUri,
+        mimeType,
+        () => setState('retrying'),
+        langCode,
+        duration,
       );
       setTranscript(text);
       setState('transcribed');
 
-      const summary = await summarize(text);
+      const summary = await summarize(text, duration);
       setBullets(summary.bullets);
       setFullSummary(summary.fullSummary);
       setReadSeconds(summary.readSeconds);
@@ -148,13 +157,13 @@ export default function BottomSheetModal({
   }
 
   function handleCopy() {
-    Clipboard.setString(transcript);
+    Clipboard.setString(fullSummary);
     showToast('Copied to clipboard');
   }
 
   async function handleShare() {
     try {
-      await Share.open({message: transcript});
+      await Share.open({message: fullSummary});
     } catch {
       // user cancelled — ignore
     }

@@ -6,32 +6,32 @@ import {
   StyleSheet,
   ScrollView,
 } from 'react-native';
-import {useRoute, type RouteProp} from '@react-navigation/native';
+import { useRoute, type RouteProp } from '@react-navigation/native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import Share from 'react-native-share';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import BulletPoints from '../components/BulletPoints';
 import TranscriptDropdown from '../components/TranscriptDropdown';
-import {formatDuration} from '../utils/formatDuration';
-import {showToast} from '../utils/toast';
+import { formatDuration } from '../utils/formatDuration';
+import { showToast } from '../utils/toast';
 import colors from '../theme/colors';
-import type {RootStackParamList} from '../navigation/AppNavigator';
+import type { RootStackParamList } from '../navigation/AppNavigator';
 
 type Route = RouteProp<RootStackParamList, 'Result'>;
 
 export default function ResultScreen() {
   const route = useRoute<Route>();
-  const {transcript, bullets, fullSummary, readSeconds, audioDuration} =
+  const { transcript, bullets, fullSummary, readSeconds, audioDuration } =
     route.params;
 
   function handleCopy() {
-    Clipboard.setString(transcript);
+    Clipboard.setString(fullSummary);
     showToast('Copied to clipboard');
   }
 
   async function handleShare() {
     try {
-      await Share.open({message: transcript});
+      await Share.open({ message: fullSummary });
     } catch {
       // user cancelled
     }

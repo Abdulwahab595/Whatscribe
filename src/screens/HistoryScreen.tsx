@@ -55,6 +55,7 @@ export default function HistoryScreen() {
           navigation.navigate('Result', {
             transcript: item.transcript,
             bullets: item.bullets,
+            fullSummary: item.fullSummary,
             readSeconds: item.readSeconds,
             audioDuration: item.duration,
           })

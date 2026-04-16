@@ -28,39 +28,37 @@ const Stack = createStackNavigator<RootStackParamList>();
 
 export default function AppNavigator() {
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName="Splash">
-        <Stack.Screen
-          name="Splash"
-          component={SplashScreen}
-          options={{headerShown: false, gestureEnabled: false}}
-        />
-        <Stack.Screen
-          name="Home"
-          component={HomeScreen}
-          options={{headerShown: false}}
-        />
-        <Stack.Screen
-          name="Processing"
-          component={ProcessingScreen}
-          options={{headerShown: false}}
-        />
-        <Stack.Screen
-          name="History"
-          component={HistoryScreen}
-          options={{title: 'History', headerBackTitle: 'Back'}}
-        />
-        <Stack.Screen
-          name="Settings"
-          component={SettingsScreen}
-          options={{title: 'Settings', headerBackTitle: 'Back'}}
-        />
-        <Stack.Screen
-          name="Result"
-          component={ResultScreen}
-          options={{title: 'Result', headerBackTitle: 'Back'}}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <Stack.Navigator initialRouteName="Splash">
+      <Stack.Screen
+        name="Splash"
+        component={SplashScreen}
+        options={{headerShown: false, gestureEnabled: false}}
+      />
+      <Stack.Screen
+        name="Home"
+        component={HomeScreen}
+        options={{headerShown: false}}
+      />
+      <Stack.Screen
+        name="Processing"
+        component={ProcessingScreen}
+        options={{headerShown: false}}
+      />
+      <Stack.Screen
+        name="History"
+        component={HistoryScreen}
+        options={{title: 'History', headerBackTitle: 'Back'}}
+      />
+      <Stack.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{title: 'Settings', headerBackTitle: 'Back'}}
+      />
+      <Stack.Screen
+        name="Result"
+        component={ResultScreen}
+        options={{title: 'Result', headerBackTitle: 'Back'}}
+      />
+    </Stack.Navigator>
   );
 }

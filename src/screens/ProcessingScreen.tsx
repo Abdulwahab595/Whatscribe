@@ -11,7 +11,7 @@ import DotsLoader from '../components/DotsLoader';
 import {transcribe} from '../api/transcribe';
 import {summarize} from '../api/summarize';
 import {formatDuration} from '../utils/formatDuration';
-import {isFreeLimitReached, addUsage} from '../hooks/useUsageTracker';
+import {addUsage, getLanguagePreference, getRemainingSeconds} from '../hooks/useUsageTracker';
 import {saveEntry} from '../store/historyStore';
 import colors from '../theme/colors';
 import type {RootStackParamList} from '../navigation/AppNavigator';
@@ -33,17 +33,27 @@ export default function ProcessingScreen() {
   const handleTap = useCallback(async () => {
     if (state !== 'idle') return;
 
-    if (isFreeLimitReached()) {
-      navigation.navigate('Settings');
+    if (getRemainingSeconds(audioDuration) <= 0) {
+      setErrorMsg('Voice note is longer than your available minutes.');
+      setState('error');
+      // optionally navigate right away
+      // navigation.navigate('Settings');
       return;
     }
 
     try {
       setState('processing');
-      const text = await transcribe(audioUri, () => setState('retrying'));
+      const langCode = getLanguagePreference();
+      const text = await transcribe(
+        audioUri,
+        null,
+        () => setState('retrying'),
+        langCode,
+        audioDuration,
+      );
       setTranscript(text);
       setState('summarizing');
-      const summary = await summarize(text);
+      const summary = await summarize(text, audioDuration);
 
       addUsage(audioDuration);
 

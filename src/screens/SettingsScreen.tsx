@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,7 +6,7 @@ import {
   StyleSheet,
   ScrollView,
 } from 'react-native';
-import Purchases, {type PurchasesPackage} from 'react-native-purchases';
+import Purchases, { type PurchasesPackage } from 'react-native-purchases';
 import {
   getPlanType,
   setPlanType,
@@ -14,10 +14,13 @@ import {
   getRemainingSeconds,
   getLanguagePreference,
   setLanguagePreference,
+  getPlanLimit,
+  resetUsage,
 } from '../hooks/useUsageTracker';
-import {formatDuration} from '../utils/formatDuration';
-import {checkSubscriptionStatus} from '../utils/subscriptionUtils';
-import CustomAlert, {useCustomAlert} from '../components/CustomAlert';
+import type { PlanType } from '../hooks/useUsageTracker';
+import { formatDuration } from '../utils/formatDuration';
+import { checkSubscriptionStatus } from '../utils/subscriptionUtils';
+import CustomAlert, { useCustomAlert } from '../components/CustomAlert';
 import colors from '../theme/colors';
 
 type Plan = 'starter' | 'monthly' | 'yearly';
@@ -25,15 +28,15 @@ type Plan = 'starter' | 'monthly' | 'yearly';
 const isInPakistan =
   Intl.DateTimeFormat().resolvedOptions().timeZone === 'Asia/Karachi';
 
-const LANGUAGE_OPTIONS: {code: string; label: string}[] = [
-  {code: 'auto', label: 'Auto-detect'},
-  {code: 'ur', label: 'Urdu / Punjabi / Saraiki'},
-  {code: 'en', label: 'English'},
-  {code: 'ar', label: 'Arabic'},
-  {code: 'hi', label: 'Hindi'},
-  {code: 'tr', label: 'Turkish'},
-  {code: 'fr', label: 'French'},
-  {code: 'de', label: 'German'},
+const LANGUAGE_OPTIONS: { code: string; label: string }[] = [
+  { code: 'auto', label: 'Auto-detect' },
+  { code: 'ur', label: 'Urdu / Punjabi / Saraiki' },
+  { code: 'en', label: 'English' },
+  { code: 'ar', label: 'Arabic' },
+  { code: 'hi', label: 'Hindi' },
+  { code: 'tr', label: 'Turkish' },
+  { code: 'fr', label: 'French' },
+  { code: 'de', label: 'German' },
 ];
 
 const PLAN_CONFIG: {
@@ -45,34 +48,34 @@ const PLAN_CONFIG: {
   popular: boolean;
   oneTime: boolean;
 }[] = [
-  {
-    key: 'starter',
-    label: 'Starter Pack',
-    pkrPrice: 'PKR 50',
-    usdPrice: '$0.18',
-    desc: '20 minutes of transcriptions • One-time',
-    popular: false,
-    oneTime: true,
-  },
-  {
-    key: 'monthly',
-    label: 'Monthly',
-    pkrPrice: 'PKR 200/month',
-    usdPrice: '$0.72/month',
-    desc: 'Unlimited transcriptions',
-    popular: false,
-    oneTime: false,
-  },
-  {
-    key: 'yearly',
-    label: 'Yearly',
-    pkrPrice: 'PKR 1,500/year',
-    usdPrice: '$5.40/year',
-    desc: 'Unlimited • Save PKR 900/year',
-    popular: true,
-    oneTime: false,
-  },
-];
+    {
+      key: 'starter',
+      label: 'Starter Pack',
+      pkrPrice: 'PKR 50',
+      usdPrice: '$0.18',
+      desc: '20 minutes of transcriptions • One-time',
+      popular: false,
+      oneTime: true,
+    },
+    {
+      key: 'monthly',
+      label: 'Monthly',
+      pkrPrice: 'PKR 200/month',
+      usdPrice: '$0.72/month',
+      desc: 'Unlimited transcriptions',
+      popular: false,
+      oneTime: false,
+    },
+    {
+      key: 'yearly',
+      label: 'Yearly',
+      pkrPrice: 'PKR 1,500/year',
+      usdPrice: '$5.40/year',
+      desc: 'Unlimited • Save PKR 900/year',
+      popular: true,
+      oneTime: false,
+    },
+  ];
 
 const PRODUCT_IDS: Record<Plan, string> = {
   starter: 'whatscribe_starter',
@@ -83,16 +86,15 @@ const PRODUCT_IDS: Record<Plan, string> = {
 export default function SettingsScreen() {
   const [selectedPlan, setSelectedPlan] = useState<Plan>('yearly');
   const selectedPlanConfig = PLAN_CONFIG.find(p => p.key === selectedPlan);
-  const [planType, setPlanTypeState] = useState<'free' | 'premium'>(
-    getPlanType(),
-  );
+  const [planType, setPlanTypeState] = useState<PlanType>(getPlanType());
   const [loading, setLoading] = useState(false);
-  const {config: alertConfig, showAlert, hideAlert} = useCustomAlert();
+  const { config: alertConfig, showAlert, hideAlert } = useCustomAlert();
   const [language, setLanguageState] = useState(getLanguagePreference());
 
   const usageSeconds = getUsageSeconds();
   const remainingSeconds = getRemainingSeconds();
-  const usagePercent = Math.min((usageSeconds / 180) * 100, 100);
+  const planLimit = getPlanLimit(planType);
+  const usagePercent = Math.min((usageSeconds / planLimit) * 100, 100);
 
   useEffect(() => {
     checkSubscriptionStatus()
@@ -126,8 +128,15 @@ export default function SettingsScreen() {
         return;
       }
 
-      const {customerInfo} = await Purchases.purchasePackage(pkg);
-      if (customerInfo.entitlements.active['premium']) {
+      const { customerInfo } = await Purchases.purchasePackage(pkg);
+
+      if (selectedPlan === 'starter') {
+        // Starter is a consumable / non-renewing logic
+        setPlanType('starter');
+        setPlanTypeState('starter');
+        resetUsage(); // fresh 20 mins
+        showAlert('Purchased!', "You now have 20 minutes of transcription.");
+      } else if (customerInfo.entitlements.active['premium']) {
         setPlanType('premium');
         setPlanTypeState('premium');
         showAlert('Subscribed!', "You're now on Premium.");
@@ -175,13 +184,13 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-      {planType === 'free' && (
+      {planType !== 'premium' && (
         <View style={styles.usageSection}>
           <View style={styles.progressBar}>
-            <View style={[styles.progressFill, {width: `${usagePercent}%`}]} />
+            <View style={[styles.progressFill, { width: `${usagePercent}%` }]} />
           </View>
           <Text style={styles.usageLabel}>
-            {formatDuration(remainingSeconds)} remaining of 3:00 free minutes
+            {formatDuration(remainingSeconds)} remaining of {planType === 'starter' ? '20:00 (Starter)' : '3:00 (Free)'}
           </Text>
         </View>
       )}
@@ -255,8 +264,8 @@ export default function SettingsScreen() {
           {loading
             ? 'Processing...'
             : selectedPlanConfig?.oneTime
-            ? 'Buy Pack'
-            : 'Subscribe'}
+              ? 'Buy Pack'
+              : 'Subscribe'}
         </Text>
       </TouchableOpacity>
 

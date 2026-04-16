@@ -5,11 +5,28 @@ const storage = new MMKV();
 const USAGE_SECONDS_KEY = 'usage_seconds';
 const PLAN_TYPE_KEY = 'plan_type';
 const LANGUAGE_KEY = 'transcription_language';
-const FREE_LIMIT = 99999; // TODO: set back to 180 before release
+const FREE_LIMIT = 180; // 3 minutes
+const STARTER_LIMIT = 1200; // 20 minutes
 
-export function getRemainingSeconds(): number {
+export type PlanType = 'free' | 'starter' | 'premium';
+
+export function getPlanLimit(plan: PlanType): number {
+  if (plan === 'premium') return Infinity;
+  if (plan === 'starter') return STARTER_LIMIT;
+  return FREE_LIMIT;
+}
+
+export function getRemainingSeconds(audioDurationToTranscribe: number = 0): number {
+  return Infinity; // TEMP: For testing purposes
+  /*
+  const plan = getPlanType();
+  if (plan === 'premium') return Infinity;
+
+  const limit = getPlanLimit(plan);
   const used = storage.getNumber(USAGE_SECONDS_KEY) ?? 0;
-  return Math.max(0, FREE_LIMIT - used);
+  // Use exact calculation here so UI can know if the new audio exceeds what's left
+  return Math.max(0, limit - used - audioDurationToTranscribe);
+  */
 }
 
 export function addUsage(seconds: number): void {
@@ -18,18 +35,15 @@ export function addUsage(seconds: number): void {
 }
 
 export function isFreeLimitReached(): boolean {
-  const used = storage.getNumber(USAGE_SECONDS_KEY) ?? 0;
-  const plan = (storage.getString(PLAN_TYPE_KEY) ?? 'free') as
-    | 'free'
-    | 'premium';
-  return used >= FREE_LIMIT && plan === 'free';
+  const remaining = getRemainingSeconds();
+  return remaining <= 0;
 }
 
-export function getPlanType(): 'free' | 'premium' {
-  return (storage.getString(PLAN_TYPE_KEY) ?? 'free') as 'free' | 'premium';
+export function getPlanType(): PlanType {
+  return (storage.getString(PLAN_TYPE_KEY) ?? 'free') as PlanType;
 }
 
-export function setPlanType(type: 'free' | 'premium'): void {
+export function setPlanType(type: PlanType): void {
   storage.set(PLAN_TYPE_KEY, type);
 }
 

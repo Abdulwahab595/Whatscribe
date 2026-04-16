@@ -1,126 +1,243 @@
-﻿import axios from 'axios';
+import axios from 'axios';
 import Config from 'react-native-config';
 import {getLanguagePreference} from '../hooks/useUsageTracker';
-const HUGGINGFACE_API_TOKEN = Config.HUGGINGFACE_API_TOKEN;
+import {sanitizeTranscript} from './transcribe';
 
-const SUMMARIZE_ENDPOINT = 'https://router.huggingface.co/v1/chat/completions';
-const SUMMARIZE_MODEL = 'meta-llama/Llama-3.1-8B-Instruct:cerebras';
+const GROQ_API_KEY = Config.GROQ_API_KEY;
+const GROQ_CHAT_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
+const MODEL = 'llama-3.3-70b-versatile';
 
 export interface SummaryResult {
-  bullets: string[];
   fullSummary: string;
+  bullets: string[];
   readSeconds: number;
 }
 
-// Language config: label + example output for the prompt
-const LANG_CONFIG: Record<
-  string,
-  {label: string; b1: string; b2: string; b3: string; summary: string}
-> = {
-  auto: {
-    label: 'Roman Urdu',
-    b1: 'Shajra aur Fard Malkiyat chahiye',
-    b2: 'Teen kanal ki Fard bhejna',
-    b3: 'Khasra number Shajra pe likhna',
-    summary:
-      'Aapko apne zameen ke documents dene hain. Teen kanal ki Fard Malkiyat aur ek Shajra chahiye. Shajra mein Marbaa, Qila aur Khasra number zaroor mention karein.',
-  },
-  ur: {
-    label: 'Roman Urdu',
-    b1: 'Shajra aur Fard Malkiyat chahiye',
-    b2: 'Teen kanal ki Fard bhejna',
-    b3: 'Khasra number Shajra pe likhna',
-    summary:
-      'Aapko apne zameen ke documents dene hain. Teen kanal ki Fard Malkiyat aur ek Shajra chahiye. Shajra mein Marbaa, Qila aur Khasra number zaroor mention karein.',
-  },
-  en: {
-    label: 'English',
-    b1: 'Meeting is tomorrow morning',
-    b2: 'Documents must be prepared',
-    b3: 'Time set for 10 AM',
-    summary:
-      'There is an important meeting tomorrow at 10 AM. Documents need to be prepared in advance.',
-  },
-  ar: {
-    label: 'Arabic',
-    b1: 'الاجتماع غداً صباحاً',
-    b2: 'يجب تحضير الوثائق',
-    b3: 'الوقت المحدد الساعة 10',
-    summary:
-      'هناك اجتماع مهم غداً في الساعة العاشرة. يجب تحضير الوثائق مسبقاً.',
-  },
-  hi: {
-    label: 'Hindi',
-    b1: 'कल सुबह मीटिंग है',
-    b2: 'दस्तावेज़ तैयार करने हैं',
-    b3: 'समय सुबह 10 बजे',
-    summary:
-      'कल सुबह 10 बजे एक महत्वपूर्ण मीटिंग है। दस्तावेज़ पहले से तैयार रखना जरूरी है।',
-  },
-  tr: {
-    label: 'Turkish',
-    b1: 'Yarın sabah toplantı var',
-    b2: 'Belgeler hazırlanmalı',
-    b3: 'Saat 10 olarak belirlendi',
-    summary:
-      "Yarın sabah saat 10'da önemli bir toplantı var. Belgelerin önceden hazırlanması gerekiyor.",
-  },
-  fr: {
-    label: 'French',
-    b1: 'Réunion demain matin',
-    b2: 'Documents à préparer',
-    b3: 'Heure fixée à 10h',
-    summary:
-      "Il y a une réunion importante demain à 10h. Les documents doivent être préparés à l'avance.",
-  },
-  de: {
-    label: 'German',
-    b1: 'Morgen früh ist Meeting',
-    b2: 'Dokumente vorbereiten',
-    b3: 'Uhrzeit auf 10 Uhr festgelegt',
-    summary:
-      'Morgen um 10 Uhr findet ein wichtiges Meeting statt. Die Dokumente müssen vorher vorbereitet werden.',
-  },
+/**
+ * Maps user language preference code → human label for the LLM prompt.
+ *
+ * IMPORTANT: 'ur' maps to 'Urdu' (Arabic/Nastaliq script) — NOT Roman Urdu.
+ * The transcription from Whisper arrives in Roman/Latin script.
+ * The LLM's job is to translate that into proper Urdu Nastaliq,
+ * exactly like the reference app in Image 2.
+ */
+const LANG_LABELS: Record<string, string> = {
+  auto: 'the same primary language used in the voice note',
+  ur:   'Roman Urdu', // Latin-script Urdu e.g. "bhai yeh karo"
+  en:   'English',
+  ar:   'Arabic',
+  hi:   'Hindi',
+  tr:   'Turkish',
+  fr:   'French',
+  de:   'German',
 };
 
-function buildSystemPrompt(langCode: string): string {
-  const cfg = LANG_CONFIG[langCode] ?? LANG_CONFIG.auto;
-  const exampleJson = JSON.stringify({
-    bullets: [cfg.b1, cfg.b2, cfg.b3],
-    fullSummary: cfg.summary,
-    readSeconds: 6,
-  });
-  return (
-    `You are a voice note summarizer. Always respond in ${cfg.label} only — never copy the language of the transcript.\n\n` +
-    `Rules:\n` +
-    `- Treat repeated phrases as ONE point. Do not duplicate bullet content.\n` +
-    `- PRESERVE specific names, document terms, numbers exactly (e.g. Shajra, Fard Malkiyat, Khasra, 3 kanal).\n` +
-    `- Be specific, not vague. Say WHAT was said, not just the topic.\n` +
-    `- Bullets: EXACTLY 3, max 10 words each. fullSummary: 2-3 sentences, no repeated points.\n` +
-    `- Return ONLY valid JSON: { "bullets": ["...","...","..."], "fullSummary": "...", "readSeconds": N }\n` +
-    `- Every string in ${cfg.label}. No markdown, no text outside JSON.\n\n` +
-    `Example:\n${exampleJson}`
-  );
+/**
+ * Per-language script enforcement rules for the LLM.
+ * These are injected directly into the prompt so the model
+ * cannot accidentally switch scripts.
+ */
+const LANG_SCRIPT_RULES: Record<string, string> = {
+  ur:   'Write ONLY in Roman Urdu (Latin letters a-z). Do NOT use Urdu/Arabic script (ا، ب، پ). Example: "Bhai ne kaha ke kaam kal tak khatam ho jayega."',
+  ar:   'Write ONLY in Arabic script. Do NOT romanize.',
+  hi:   'Write ONLY in Hindi Devanagari script (अ, ब, क...). Do NOT romanize.',
+  en:   'Write ONLY in English.',
+  tr:   'Write ONLY in Turkish.',
+  fr:   'Write ONLY in French.',
+  de:   'Write ONLY in German.',
+  auto: 'Detect the language of the transcript and write ONLY in its native script. Do NOT romanize.',
+};
+
+/**
+ * Detects if the LLM accidentally wrote Roman Urdu instead of Nastaliq Urdu.
+ * Returns true if output is VALID (contains Urdu/Arabic script as expected).
+ */
+const ARABIC_URDU_SCRIPT_REGEX =
+  /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+
+/**
+ * Detects non-Latin scripts — used to validate English-only output.
+ */
+const NON_LATIN_SCRIPT_REGEX =
+  /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u0900-\u097F]/;
+
+function validateOutputLanguage(result: SummaryResult, langCode: string): boolean {
+  const allText = [result.fullSummary, ...result.bullets].join(' ');
+
+  if (langCode === 'ur') {
+    // Roman Urdu MUST NOT contain Arabic/Urdu Nastaliq characters
+    if (ARABIC_URDU_SCRIPT_REGEX.test(allText)) {
+      console.log('Validation fail: ur output contains Nastaliq script (should be Roman)');
+      return false;
+    }
+  }
+
+  if (langCode === 'en' || langCode === 'auto') {
+    // English output must NOT contain Arabic/Urdu or Devanagari
+    if (NON_LATIN_SCRIPT_REGEX.test(allText)) {
+      console.log('Validation fail: en/auto output contains non-Latin script');
+      return false;
+    }
+  }
+
+  return true;
 }
 
-function buildUserPrompt(transcript: string, langCode: string): string {
-  const cfg = LANG_CONFIG[langCode] ?? LANG_CONFIG.auto;
-  return `Summarize this voice note transcript in ${cfg.label}. Return only JSON.\n\nTranscript: ${transcript}`;
+/**
+ * If LLM output fails script validation, retry once with a stricter prompt.
+ */
+async function retryWithCorrection(
+  result: SummaryResult,
+  cleanTranscript: string,
+  langCode: string,
+  token: string,
+): Promise<SummaryResult> {
+  const isValid = validateOutputLanguage(result, langCode);
+  if (isValid) {
+    console.log('Output validation passed');
+    return result;
+  }
+
+  console.log('Output validation failed — retrying with correction prompt');
+
+  const langLabel = LANG_LABELS[langCode] ?? 'English';
+  const scriptRule = LANG_SCRIPT_RULES[langCode] ?? LANG_SCRIPT_RULES.auto;
+
+  const correctionPrompt = `Your previous output was in the wrong script. You MUST rewrite in ${langLabel} only.
+
+CRITICAL RULE: ${scriptRule}
+
+Original transcript (may be in Roman/mixed script):
+"${cleanTranscript}"
+
+Translate the complete message into ${langLabel} and return ONLY this JSON:
+{
+  "fullSummary": "complete translated message in ${langLabel}",
+  "bullets": ["point 1", "point 2", "point 3"],
+  "readSeconds": 8
+}`;
+
+  try {
+    const retryResponse = await axios.post<{
+      choices: {message: {content: string}}[];
+    }>(
+      GROQ_CHAT_ENDPOINT,
+      {
+        model: MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: `You are a multilingual translator. You ALWAYS respond in valid JSON only. You ALWAYS write in the exact script requested. You NEVER mix languages or scripts.`,
+          },
+          {role: 'user', content: correctionPrompt},
+        ],
+        max_tokens: 1024,
+        temperature: 0.1,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 25000,
+      },
+    );
+
+    const retryContent = retryResponse.data?.choices?.[0]?.message?.content ?? '';
+    console.log('--- Retry LLM Response ---');
+    console.log(retryContent.slice(0, 500));
+    console.log('--------------------------');
+
+    const retryParsed = parseResponse(retryContent);
+    if (retryParsed) {
+      if (!validateOutputLanguage(retryParsed, langCode)) {
+        console.log('Still wrong script after retry — returning best attempt');
+      }
+      return retryParsed;
+    }
+  } catch (e: any) {
+    console.log('Retry call failed:', e?.message ?? e);
+  }
+
+  return result;
 }
 
-function fallback(transcript: string): SummaryResult {
-  const sentences = transcript
-    .split(/[.!?।]+/)
-    .map(s => s.trim())
-    .filter(Boolean);
-  return {
-    bullets: sentences.slice(0, 3),
-    fullSummary: sentences.slice(0, 5).join('. '),
-    readSeconds: 5,
-  };
+/**
+ * Light sanitization before sending to LLM.
+ * Only removes noise — does NOT remove meaningful filler words
+ * because those are part of the spoken message.
+ */
+function sanitizeForLLM(transcript: string): string {
+  let text = sanitizeTranscript(transcript);
+
+  // Remove pure English filler sounds (no semantic content)
+  text = text.replace(/\b(uh+|um+|hmm+|er+)\b/gi, '');
+
+  // Collapse extra whitespace left after removal
+  text = text.replace(/([,.])\s*([,.])+/g, '$1');
+  text = text.replace(/\s{2,}/g, ' ').trim();
+
+  return text;
 }
 
-function parseJson(raw: string): SummaryResult | null {
+/**
+ * Builds the LLM prompt.
+ *
+ * Goal: pure faithful translation of the spoken message.
+ * NOT a summary. NOT condensed. Every sentence included.
+ * 3 bullet points capture the key things the sender is saying.
+ */
+function buildPrompt(transcript: string, langCode: string, durationSeconds?: number): string {
+  const langLabel = LANG_LABELS[langCode] ?? 'English';
+  const scriptRule = LANG_SCRIPT_RULES[langCode] ?? LANG_SCRIPT_RULES.auto;
+
+  const isLongAudio = durationSeconds && durationSeconds > 60;
+
+  const mainTask = isLongAudio
+    ? `2. SUMMARIZE the following transcript in ${langLabel}. Capture the main purpose, all key requests, names, and numbers, but keep it concise and natural. This is a summary of a long message, so focus on the important details.`
+    : `2. Translate the ENTIRE message into ${langLabel} — word for word, sentence for sentence. Keep the natural conversational tone. Do NOT shorten, condense, or omit anything. This is a translation, not a summary.`;
+
+  const lengthRule = isLongAudio
+    ? `- fullSummary must be a concise summary of the message in ${langLabel}`
+    : `- fullSummary must be the COMPLETE translated message — same length as the original, every sentence present`;
+
+  return `You are a voice message translator. The transcript below was recorded by a South Asian speaker and may be in Punjabi, Urdu, Roman Urdu, Hindi, or a mix of these with English.
+
+TARGET LANGUAGE: ${langLabel}
+SCRIPT RULE: ${scriptRule}
+
+YOUR JOB:
+1. Read the full transcript and understand what the speaker is saying.
+${mainTask}
+3. Write exactly 3 bullet points in ${langLabel} capturing the key things the sender is asking or saying. Max 12 words per bullet.
+
+RULES:
+${lengthRule}
+- ${scriptRule}
+- Preserve all names, numbers, app names, and places exactly as spoken
+- If a word is unclear, infer from context — do not leave gaps
+- Return ONLY valid JSON. No markdown, no explanation, nothing outside the JSON block.
+
+Transcript:
+"${transcript}"
+
+JSON structure to return (use EXACTLY these key names):
+{
+  "fullSummary": "complete translated message in ${langLabel} — every sentence, full length",
+  "bullets": ["key point 1 in ${langLabel}", "key point 2 in ${langLabel}", "key point 3 in ${langLabel}"]
+}`;
+}
+
+/**
+ * Programmatically estimate reading time instead of letting LLM hallucinate.
+ * Average reading speed: 180 WPM = 3 words per second.
+ */
+function calculateReadSeconds(text: string): number {
+  const words = text.trim().split(/\s+/).length;
+  return Math.max(2, Math.ceil(words / 3));
+}
+
+function parseResponse(raw: string): SummaryResult | null {
   const stripped = raw
     .replace(/```json/gi, '')
     .replace(/```/g, '')
@@ -131,19 +248,23 @@ function parseJson(raw: string): SummaryResult | null {
 
   try {
     const parsed: {
+      fullSummary?: string;
+      fullTranslation?: string;
       bullets: string[];
-      fullSummary: string;
-      readSeconds: number;
     } = JSON.parse(match[0]);
+
+    const text = parsed.fullSummary ?? parsed.fullTranslation ?? '';
+
     if (
+      typeof text === 'string' &&
+      text.length > 0 &&
       Array.isArray(parsed.bullets) &&
-      typeof parsed.fullSummary === 'string' &&
-      typeof parsed.readSeconds === 'number'
+      parsed.bullets.length > 0
     ) {
       return {
+        fullSummary: text,
         bullets: parsed.bullets.slice(0, 3),
-        fullSummary: parsed.fullSummary,
-        readSeconds: parsed.readSeconds,
+        readSeconds: calculateReadSeconds(text),
       };
     }
     return null;
@@ -152,44 +273,92 @@ function parseJson(raw: string): SummaryResult | null {
   }
 }
 
-export async function summarize(transcript: string): Promise<SummaryResult> {
+function fallback(transcript: string): SummaryResult {
+  const sentences = transcript
+    .split(/[.!?।]+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  return {
+    fullSummary: transcript,
+    bullets:
+      sentences.slice(0, 3).length > 0
+        ? sentences.slice(0, 3)
+        : [transcript.slice(0, 80)],
+    readSeconds: calculateReadSeconds(transcript),
+  };
+}
+
+export async function summarize(
+  transcript: string,
+  durationSeconds?: number,
+): Promise<SummaryResult> {
   const langCode = getLanguagePreference();
-  console.log('--- Summarizing Transcript ---');
-  console.log(transcript);
-  console.log('language:', langCode);
+  const token = GROQ_API_KEY ?? '';
+
+  console.log('--- Summarize Start ---');
+  console.log('Language:', langCode);
+  console.log('Audio Duration:', durationSeconds != null ? `${durationSeconds}s` : 'unknown');
+  console.log('Transcript length (raw):', transcript.length);
+
+  const cleanTranscript = sanitizeForLLM(transcript);
+  console.log('Transcript length (clean):', cleanTranscript.length);
+  console.log('Clean snippet:', cleanTranscript.slice(0, 300));
+
+  if (!token) {
+    console.log('GROQ_API_KEY missing — using fallback');
+    return fallback(cleanTranscript);
+  }
+
+  if (!cleanTranscript) {
+    console.log('Empty transcript after sanitization — using fallback');
+    return fallback(transcript);
+  }
+
   try {
-    const token = HUGGINGFACE_API_TOKEN ?? '';
     const response = await axios.post<{
       choices: {message: {content: string}}[];
     }>(
-      SUMMARIZE_ENDPOINT,
+      GROQ_CHAT_ENDPOINT,
       {
-        model: SUMMARIZE_MODEL,
+        model: MODEL,
         messages: [
-          {role: 'system', content: buildSystemPrompt(langCode)},
-          {role: 'user', content: buildUserPrompt(transcript, langCode)},
+          {
+            role: 'system',
+            content: `You are a precise multilingual translator. You ALWAYS respond in valid JSON only. You ALWAYS write in the exact language and script specified in the user prompt. You NEVER summarize — you translate fully. You NEVER mix languages or scripts in your output.`,
+          },
+          {
+            role: 'user',
+            content: buildPrompt(cleanTranscript, langCode, durationSeconds),
+          },
         ],
-        max_tokens: 200,
+        max_tokens: 2048,
+        temperature: 0.1,
       },
       {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
+        timeout: 30000,
       },
     );
 
-    const generated = response.data?.choices?.[0]?.message?.content ?? '';
+    const content = response.data?.choices?.[0]?.message?.content ?? '';
 
-    console.log('--- Mistral Response ---');
-    console.log(generated);
-    console.log('------------------------');
+    console.log('--- LLM Response ---');
+    console.log(content.slice(0, 800));
+    console.log('--------------------');
 
-    const parsed = parseJson(generated);
-    if (parsed) return parsed;
-    return fallback(transcript);
-  } catch (e) {
-    console.log('Summarization API call failed:', e);
-    return fallback(transcript);
+    const parsed = parseResponse(content);
+    if (parsed) {
+      return await retryWithCorrection(parsed, cleanTranscript, langCode, token);
+    }
+
+    console.log('JSON parse failed — using fallback');
+    return fallback(cleanTranscript);
+  } catch (e: any) {
+    console.log('Summarize API failed:', e?.response?.data ?? e?.message ?? e);
+    return fallback(cleanTranscript);
   }
 }
