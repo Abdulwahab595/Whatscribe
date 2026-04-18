@@ -9,6 +9,7 @@ const MODEL = 'llama-3.3-70b-versatile';
 
 export interface SummaryResult {
   fullSummary: string;
+  fullTranslation: string; // The complete polished message
   bullets: string[];
   readSeconds: number;
 }
@@ -110,9 +111,10 @@ CRITICAL RULE: ${scriptRule}
 Original transcript (may be in Roman/mixed script):
 "${cleanTranscript}"
 
-Translate the complete message into ${langLabel} and return ONLY this JSON:
+Translate the complete message into ${langLabel} in THIRD PERSON — describe what the sender is saying, starting with "This person is saying..." or its equivalent in ${langLabel}. Return ONLY this JSON:
 {
-  "fullSummary": "complete translated message in ${langLabel}",
+  "fullSummary": "third-person summary of the complete message in ${langLabel}",
+  "fullTranslation": "complete third-person translation of the message in ${langLabel}",
   "bullets": ["point 1", "point 2", "point 3"],
   "readSeconds": 8
 }`;
@@ -127,7 +129,7 @@ Translate the complete message into ${langLabel} and return ONLY this JSON:
         messages: [
           {
             role: 'system',
-            content: `You are a multilingual translator. You ALWAYS respond in valid JSON only. You ALWAYS write in the exact script requested. You NEVER mix languages or scripts.`,
+            content: `You are a multilingual translator. You ALWAYS respond in valid JSON only. You ALWAYS write in the exact script requested. You NEVER mix languages or scripts. You ALWAYS write in third person, describing what the sender is saying.`,
           },
           {role: 'user', content: correctionPrompt},
         ],
@@ -180,26 +182,22 @@ function sanitizeForLLM(transcript: string): string {
   return text;
 }
 
-/**
- * Builds the LLM prompt.
- *
- * Goal: pure faithful translation of the spoken message.
- * NOT a summary. NOT condensed. Every sentence included.
- * 3 bullet points capture the key things the sender is saying.
- */
 function buildPrompt(transcript: string, langCode: string, durationSeconds?: number): string {
   const langLabel = LANG_LABELS[langCode] ?? 'English';
   const scriptRule = LANG_SCRIPT_RULES[langCode] ?? LANG_SCRIPT_RULES.auto;
 
-  const isLongAudio = durationSeconds && durationSeconds > 60;
+  // Threshold: 3 minutes = 180 seconds
+  const isLongAudio = durationSeconds && durationSeconds > 180;
 
   const mainTask = isLongAudio
-    ? `2. SUMMARIZE the following transcript in ${langLabel}. Capture the main purpose, all key requests, names, and numbers, but keep it concise and natural. This is a summary of a long message, so focus on the important details.`
-    : `2. Translate the ENTIRE message into ${langLabel} — word for word, sentence for sentence. Keep the natural conversational tone. Do NOT shorten, condense, or omit anything. This is a translation, not a summary.`;
+    ? `2. SUMMARIZE the following transcript in ${langLabel}. Write in THIRD PERSON — as if you are describing what the sender is saying to someone else. Start with a phrase like "This person is saying..." or "The sender mentions..." or the equivalent in ${langLabel}. Capture the main purpose, all key requests, names, and numbers, but keep it concise and natural.`
+    : `2. Translate the ENTIRE message into ${langLabel} — word for word, sentence for sentence. Write in THIRD PERSON — as if you are describing what the sender is saying. Start with a phrase like "This person is saying..." or "The sender mentions..." or the equivalent in ${langLabel}. Keep the natural conversational tone. Do NOT shorten, condense, or omit anything.`;
 
   const lengthRule = isLongAudio
-    ? `- fullSummary must be a concise summary of the message in ${langLabel}`
-    : `- fullSummary must be the COMPLETE translated message — same length as the original, every sentence present`;
+    ? `- fullSummary must be a concise third-person summary of the message in ${langLabel}, starting with "This person is saying..." or its equivalent
+- fullTranslation must be the COMPLETE third-person translation — every sentence present, natural tone`
+    : `- fullSummary must be the COMPLETE third-person translation — every sentence present, starting with "This person is saying..." or its equivalent in ${langLabel}
+- fullTranslation should be the same as fullSummary`;
 
   return `You are a voice message translator. The transcript below was recorded by a South Asian speaker and may be in Punjabi, Urdu, Roman Urdu, Hindi, or a mix of these with English.
 
@@ -209,11 +207,12 @@ SCRIPT RULE: ${scriptRule}
 YOUR JOB:
 1. Read the full transcript and understand what the speaker is saying.
 ${mainTask}
-3. Write exactly 3 bullet points in ${langLabel} capturing the key things the sender is asking or saying. Max 12 words per bullet.
+3. Write exactly 3 bullet points in ${langLabel} capturing the key things the sender is asking or saying. Max 12 words per bullet. Bullets must also be in third person (e.g. "He wants..." / "She is asking..." or equivalent).
 
 RULES:
 ${lengthRule}
 - ${scriptRule}
+- ALWAYS write in third person. Never use "I", "me", "my", "we". Use "this person", "the sender", "he", "she", or "they" instead.
 - Preserve all names, numbers, app names, and places exactly as spoken
 - If a word is unclear, infer from context — do not leave gaps
 - Return ONLY valid JSON. No markdown, no explanation, nothing outside the JSON block.
@@ -223,8 +222,9 @@ Transcript:
 
 JSON structure to return (use EXACTLY these key names):
 {
-  "fullSummary": "complete translated message in ${langLabel} — every sentence, full length",
-  "bullets": ["key point 1 in ${langLabel}", "key point 2 in ${langLabel}", "key point 3 in ${langLabel}"]
+  "fullSummary": "third-person summary in ${langLabel}",
+  "fullTranslation": "COMPLETE third-person translation in ${langLabel}",
+  "bullets": ["key point 1 in third person in ${langLabel}", "key point 2 in third person in ${langLabel}", "key point 3 in third person in ${langLabel}"]
 }`;
 }
 
@@ -254,6 +254,7 @@ function parseResponse(raw: string): SummaryResult | null {
     } = JSON.parse(match[0]);
 
     const text = parsed.fullSummary ?? parsed.fullTranslation ?? '';
+    const fullText = parsed.fullTranslation ?? text;
 
     if (
       typeof text === 'string' &&
@@ -263,6 +264,7 @@ function parseResponse(raw: string): SummaryResult | null {
     ) {
       return {
         fullSummary: text,
+        fullTranslation: fullText,
         bullets: parsed.bullets.slice(0, 3),
         readSeconds: calculateReadSeconds(text),
       };
@@ -281,6 +283,7 @@ function fallback(transcript: string): SummaryResult {
 
   return {
     fullSummary: transcript,
+    fullTranslation: transcript,
     bullets:
       sentences.slice(0, 3).length > 0
         ? sentences.slice(0, 3)
@@ -317,7 +320,7 @@ export async function summarize(
 
   try {
     const response = await axios.post<{
-      choices: {message: {content: string}}[];
+      choices: {message:{content: string}}[];
     }>(
       GROQ_CHAT_ENDPOINT,
       {
@@ -325,7 +328,7 @@ export async function summarize(
         messages: [
           {
             role: 'system',
-            content: `You are a precise multilingual translator. You ALWAYS respond in valid JSON only. You ALWAYS write in the exact language and script specified in the user prompt. You NEVER summarize — you translate fully. You NEVER mix languages or scripts in your output.`,
+            content: `You are a precise multilingual translator. You ALWAYS respond in valid JSON only. You ALWAYS write in the exact language and script specified in the user prompt. You ALWAYS write in third person — never use "I", "me", or "my". You NEVER mix languages or scripts in your output.`,
           },
           {
             role: 'user',

@@ -8,14 +8,32 @@ import type { RootStackParamList } from '../navigation/AppNavigator';
 
 type Nav = StackNavigationProp<RootStackParamList, 'Splash'>;
 
+const HAS_LAUNCHED = 'has_launched_whatscribe';
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 export default function SplashScreen() {
   const navigation = useNavigation<Nav>();
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      navigation.replace('Home');
-    }, 2000);
-    return () => clearTimeout(timer);
+    const checkOnboarding = async () => {
+      try {
+        const hasOnboarded = await AsyncStorage.getItem('HAS_ONBOARDED');
+        
+        // Brief delay for the splash animation
+        setTimeout(() => {
+          if (hasOnboarded === 'true') {
+            navigation.replace('Home');
+          } else {
+            navigation.replace('Onboarding');
+          }
+        }, 2000);
+      } catch (e) {
+        navigation.replace('Home');
+      }
+    };
+
+    checkOnboarding();
   }, [navigation]);
 
   return (

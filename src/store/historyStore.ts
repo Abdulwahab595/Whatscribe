@@ -9,6 +9,7 @@ export interface HistoryEntry {
   transcript: string;
   bullets: string[];
   fullSummary: string;
+  fullTranslation: string;
   readSeconds: number;
   createdAt: string;
 }

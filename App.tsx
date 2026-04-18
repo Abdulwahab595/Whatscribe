@@ -3,7 +3,6 @@ import React, {useEffect} from 'react';
 import {StyleSheet, Platform} from 'react-native';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
-import Purchases from 'react-native-purchases';
 import Config from 'react-native-config';
 import AppNavigator from './src/navigation/AppNavigator';
 import BottomSheetModal from './src/components/BottomSheetModal';
@@ -31,15 +30,7 @@ function RootApp(): React.JSX.Element {
 
 function App(): React.JSX.Element {
   useEffect(() => {
-    // Initialize RevenueCat once at app startup.
-    // Use platform-specific keys if you ever create separate iOS/Android projects.
-    const apiKey = Config.REVENUECAT_API_KEY ?? '';
-    if (apiKey) {
-      Purchases.configure({apiKey});
-      console.log('RevenueCat configured');
-    } else {
-      console.warn('REVENUECAT_API_KEY missing from .env');
-    }
+    // IAP initialization logic moved to subscriptionUtils
   }, []);
   return (
     <GestureHandlerRootView style={styles.root}>

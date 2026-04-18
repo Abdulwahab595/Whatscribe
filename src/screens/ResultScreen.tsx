@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import BulletPoints from '../components/BulletPoints';
 import TranscriptDropdown from '../components/TranscriptDropdown';
 import { formatDuration } from '../utils/formatDuration';
 import { showToast } from '../utils/toast';
+import FullMessageModal from '../components/FullMessageModal';
 import colors from '../theme/colors';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 
@@ -21,8 +22,23 @@ type Route = RouteProp<RootStackParamList, 'Result'>;
 
 export default function ResultScreen() {
   const route = useRoute<Route>();
-  const { transcript, bullets, fullSummary, readSeconds, audioDuration } =
-    route.params;
+  const {
+    transcript,
+    bullets,
+    fullSummary,
+    fullTranslation,
+    readSeconds,
+    audioDuration,
+    autoShowFullMessage,
+  } = route.params;
+
+  const [showFullMessage, setShowFullMessage] = useState(false);
+
+  useEffect(() => {
+    if (autoShowFullMessage) {
+      setShowFullMessage(true);
+    }
+  }, [autoShowFullMessage]);
 
   function handleCopy() {
     Clipboard.setString(fullSummary);
@@ -46,6 +62,21 @@ export default function ResultScreen() {
 
       <BulletPoints bullets={bullets} />
       <TranscriptDropdown summary={fullSummary} />
+
+      {audioDuration > 180 && (
+        <TouchableOpacity
+          onPress={() => setShowFullMessage(true)}
+          style={styles.fullMsgBtn}>
+          <Text style={styles.fullMsgBtnText}>See Full Message</Text>
+          <Ionicons name="arrow-forward-circle" size={16} color={colors.primaryBlue} />
+        </TouchableOpacity>
+      )}
+
+      <FullMessageModal
+        visible={showFullMessage}
+        onClose={() => setShowFullMessage(false)}
+        fullTranslation={fullTranslation || fullSummary}
+      />
 
       <View style={styles.actionBar}>
         <TouchableOpacity
@@ -89,6 +120,18 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     marginBottom: 8,
+  },
+  fullMsgBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    gap: 4,
+    paddingVertical: 4,
+  },
+  fullMsgBtnText: {
+    color: colors.primaryBlue,
+    fontSize: 14,
+    fontWeight: '600',
   },
   actionBar: {
     flexDirection: 'row',

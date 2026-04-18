@@ -5,20 +5,20 @@ const storage = new MMKV();
 const USAGE_SECONDS_KEY = 'usage_seconds';
 const PLAN_TYPE_KEY = 'plan_type';
 const LANGUAGE_KEY = 'transcription_language';
-const FREE_LIMIT = 180; // 3 minutes
-const STARTER_LIMIT = 1200; // 20 minutes
 
 export type PlanType = 'free' | 'starter' | 'premium';
 
+const LIMITS: Record<PlanType, number> = {
+  free: 0, // TEMPORARILY DISABLED FOR TESTING (Was 180)
+  starter: 1200, // 20 mins
+  premium: Infinity,
+};
+
 export function getPlanLimit(plan: PlanType): number {
-  if (plan === 'premium') return Infinity;
-  if (plan === 'starter') return STARTER_LIMIT;
-  return FREE_LIMIT;
+  return LIMITS[plan];
 }
 
 export function getRemainingSeconds(audioDurationToTranscribe: number = 0): number {
-  return Infinity; // TEMP: For testing purposes
-  /*
   const plan = getPlanType();
   if (plan === 'premium') return Infinity;
 
@@ -26,7 +26,6 @@ export function getRemainingSeconds(audioDurationToTranscribe: number = 0): numb
   const used = storage.getNumber(USAGE_SECONDS_KEY) ?? 0;
   // Use exact calculation here so UI can know if the new audio exceeds what's left
   return Math.max(0, limit - used - audioDurationToTranscribe);
-  */
 }
 
 export function addUsage(seconds: number): void {

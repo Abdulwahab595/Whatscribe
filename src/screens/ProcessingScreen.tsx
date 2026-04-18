@@ -64,6 +64,7 @@ export default function ProcessingScreen() {
         transcript: text,
         bullets: summary.bullets,
         fullSummary: summary.fullSummary,
+        fullTranslation: summary.fullTranslation,
         readSeconds: summary.readSeconds,
         createdAt: new Date().toISOString(),
       });
@@ -72,6 +73,7 @@ export default function ProcessingScreen() {
         transcript: text,
         bullets: summary.bullets,
         fullSummary: summary.fullSummary,
+        fullTranslation: summary.fullTranslation,
         readSeconds: summary.readSeconds,
         audioDuration,
       });

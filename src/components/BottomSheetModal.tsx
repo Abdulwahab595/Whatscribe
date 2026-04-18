@@ -56,6 +56,7 @@ export default function BottomSheetModal({
   const [transcript, setTranscript] = useState('');
   const [bullets, setBullets] = useState<string[]>([]);
   const [fullSummary, setFullSummary] = useState('');
+  const [fullTranslation, setFullTranslation] = useState('');
   const [readSeconds, setReadSeconds] = useState(5);
   const [errorMsg, setErrorMsg] = useState('');
   const [limitModalVisible, setLimitModalVisible] = useState(false);
@@ -132,6 +133,7 @@ export default function BottomSheetModal({
       const summary = await summarize(text, duration);
       setBullets(summary.bullets);
       setFullSummary(summary.fullSummary);
+      setFullTranslation(summary.fullTranslation);
       setReadSeconds(summary.readSeconds);
 
       addUsage(duration);
@@ -272,6 +274,31 @@ export default function BottomSheetModal({
                 </Text>
                 <BulletPoints bullets={bullets} />
                 <TranscriptDropdown summary={fullSummary} />
+
+                {realDuration > 180 && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      onClose();
+                      navigation.navigate('Result', {
+                        transcript,
+                        bullets,
+                        fullSummary,
+                        fullTranslation,
+                        readSeconds,
+                        audioDuration: realDuration,
+                        autoShowFullMessage: true,
+                      });
+                    }}
+                    style={styles.fullMsgBtn}>
+                    <Text style={styles.fullMsgBtnText}>See Full Message</Text>
+                    <Ionicons
+                      name="arrow-forward-circle"
+                      size={16}
+                      color={colors.primaryBlue}
+                    />
+                  </TouchableOpacity>
+                )}
+
                 <View style={styles.actionBar}>
                   <TouchableOpacity
                     style={styles.actionBtn}
@@ -365,6 +392,18 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     marginBottom: 8,
+  },
+  fullMsgBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    gap: 4,
+    paddingVertical: 4,
+  },
+  fullMsgBtnText: {
+    color: colors.primaryBlue,
+    fontSize: 14,
+    fontWeight: '600',
   },
   actionBar: {
     flexDirection: 'row',
