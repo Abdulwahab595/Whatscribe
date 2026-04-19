@@ -192,9 +192,9 @@ export default function BottomSheetModal({
                 setLimitModalVisible(false);
                 onClose();
                 try {
-                  navigation.navigate('Settings');
+                  navigation.navigate('SubscriptionSettings');
                 } catch (e) {
-                  // Silent fail in contexts where 'Settings' doesn't exist
+                  // Silent fail in contexts where 'SubscriptionSettings' doesn't exist
                 }
               }}>
               <Text style={styles.limitButtonText}>View Plans</Text>

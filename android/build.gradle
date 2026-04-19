@@ -3,7 +3,7 @@ buildscript {
         buildToolsVersion = "35.0.0"
         minSdkVersion = 24
         compileSdkVersion = 35
-        targetSdkVersion = 34
+        targetSdkVersion = 35
         ndkVersion = "26.1.10909125"
         kotlinVersion = "1.9.24"
     }
@@ -18,21 +18,19 @@ buildscript {
     }
 }
 
+
+
 apply plugin: "com.facebook.react.rootproject"
 
 subprojects { project ->
-    // Fix for Ninja/CMake path limits on Windows
-    if (project.name != 'app') {
-        project.buildDir = "C:/ws_b/Whatscribe/${project.name}"
-        
-        afterEvaluate {
-            if (project.plugins.hasPlugin('com.android.library') || project.plugins.hasPlugin('com.android.application')) {
-                project.android {
-                    externalNativeBuild {
-                        cmake {
-                            // This moves the .cxx folder to a short path
-                            buildStagingDirectory = "C:/ws_c/Whatscribe/${project.name}"
-                        }
+    project.buildDir = "C:/b/${project.name}"
+    // Use lazy configuration to avoid 'already evaluated' errors
+    project.plugins.whenPluginAdded { plugin ->
+        if (plugin instanceof com.android.build.gradle.AppPlugin || plugin instanceof com.android.build.gradle.LibraryPlugin) {
+            project.android {
+                externalNativeBuild {
+                    cmake {
+                        buildStagingDirectory = "C:/c/Whatscribe/${project.name}"
                     }
                 }
             }

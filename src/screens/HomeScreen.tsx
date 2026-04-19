@@ -1,18 +1,18 @@
 import React from 'react';
-import {View, Text, TouchableOpacity, StyleSheet} from 'react-native';
-import {useNavigation} from '@react-navigation/native';
-import type {StackNavigationProp} from '@react-navigation/stack';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
 import RNBlobUtil from 'react-native-blob-util';
 import WavyIcon from '../components/WavyIcon';
-import CustomAlert, {useCustomAlert} from '../components/CustomAlert';
+import CustomAlert, { useCustomAlert } from '../components/CustomAlert';
 import colors from '../theme/colors';
-import type {RootStackParamList} from '../navigation/AppNavigator';
+import type { RootStackParamList } from '../navigation/AppNavigator';
 
 type Nav = StackNavigationProp<RootStackParamList, 'Home'>;
 
 export default function HomeScreen() {
   const navigation = useNavigation<Nav>();
-  const {config: alertConfig, showAlert, hideAlert} = useCustomAlert();
+  const { config: alertConfig, showAlert, hideAlert } = useCustomAlert();
 
   async function handlePickAudio() {
     try {
@@ -20,7 +20,7 @@ export default function HomeScreen() {
         'How to transcribe',
         'Share a voice note from WhatsApp or another app using the Share menu, then choose Whatscribe.',
       );
-    } catch (e) {}
+    } catch (e) { }
   }
 
   return (

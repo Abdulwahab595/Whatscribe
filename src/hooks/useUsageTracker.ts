@@ -9,7 +9,7 @@ const LANGUAGE_KEY = 'transcription_language';
 export type PlanType = 'free' | 'starter' | 'premium';
 
 const LIMITS: Record<PlanType, number> = {
-  free: 0, // TEMPORARILY DISABLED FOR TESTING (Was 180)
+  free: 180,
   starter: 1200, // 20 mins
   premium: Infinity,
 };
