@@ -44,6 +44,7 @@
 
 # react-native-config (Environment Variables)
 -keep class com.lugg.ReactNativeConfig.** { *; }
+-keep class com.whatscribe.BuildConfig { *; }
 
 # react-native-share-menu
 -keep class com.sharemenu.** { *; }

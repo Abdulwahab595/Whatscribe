@@ -10,7 +10,7 @@ export type PlanType = 'free' | 'starter' | 'premium';
 
 const LIMITS: Record<PlanType, number> = {
   free: 180,
-  starter: 1200, // 20 mins
+  starter: 1200,
   premium: Infinity,
 };
 
