@@ -96,8 +96,8 @@ android {
         applicationId "com.whatscribe"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 15
-        versionName "1.0.15"
+        versionCode 17
+        versionName "1.0.17"
         missingDimensionStrategy 'store', 'play'
         resValue "string", "build_config_package", "com.whatscribe"
     }

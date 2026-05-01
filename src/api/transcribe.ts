@@ -20,7 +20,7 @@ console.log('Groq Token loaded:', GROQ_API_KEY ? 'YES' : 'NO — check .env');
  */
 const WHISPER_LANG_MAP: Record<string, string | null> = {
   auto: null, // pure auto-detect
-  ur:   null, // auto-detect — do NOT force 'ur'; see note above
+  ur:   'ur', // Force Urdu engine for high accuracy (Nastaliq output)
   en:   'en',
   ar:   'ar',
   hi:   'hi',
@@ -38,10 +38,9 @@ const WHISPER_LANG_MAP: Record<string, string | null> = {
 function buildWhisperPrompt(langCode: string): string {
   switch (langCode) {
     case 'ur':
-      // Roman-script hint → Whisper stays in Latin/mixed mode → complete transcript
-      // Name seeds prevent Whisper from mapping South Asian names to famous Western names
-      // e.g. "Asad" → "Assad", "Umer" → "Omar", "Bilal" → "Bill"
-      return 'This audio is from a South Asian speaker. It may contain Punjabi, Urdu, Saraiki, Roman Urdu, or English. Common words: bhai, karo, bhejo, account, app, screen shot, download, theek hai, haan, matlab. Common names: Asad, Usman, Bilal, Hamza, Umer, Ali, Hassan, Zain, Saad, Raza, Ayesha, Fatima, Sana, Nida, Hira. Transcribe every word exactly as spoken. Do not skip or truncate any part.';
+    case 'auto':
+      // Natural prompt context reduces 'instruction leakage' where Whisper repeats the command.
+      return 'Bhai, kya haal hai? Main kaam check kar raha hoon, aap please details bhej dein. theek hai haan. Accha, sahi hai.';
     case 'en':
       return 'This audio is in English. Transcribe all spoken words accurately, including names and numbers.';
     case 'ar':
@@ -65,7 +64,8 @@ function buildWhisperPrompt(langCode: string): string {
  * whisper-large-v3-turbo → faster, fine for single-language audio (EN/AR/HI/TR/FR/DE)
  */
 function getWhisperModel(langCode: string): string {
-  if (langCode === 'ur' || langCode === 'auto') {
+  // Always use large-v3 for South Asian languages/auto to handle dialects better
+  if (langCode === 'ur' || langCode === 'auto' || langCode === 'hi') {
     return 'whisper-large-v3';
   }
   return 'whisper-large-v3-turbo';
@@ -107,6 +107,22 @@ export function sanitizeTranscript(raw: string): string {
     /\d{2}:\d{2}:\d{2}[.,]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[.,]\d{3}/g,
     '',
   );
+
+  // Remove common Whisper "instruction leaks" (where it repeats the prompt)
+  text = text.replace(/Transcribe every word exactly as spoken/gi, '');
+  text = text.replace(/Do not skip or truncate any part/gi, '');
+  text = text.replace(/This audio is from a South Asian speaker/gi, '');
+  text = text.replace(/It may contain Punjabi, Urdu, Saraiki/gi, '');
+
+  // Remove common Whisper hallucinations on silent audio
+  text = text.replace(/Thank you for watching/gi, '');
+  text = text.replace(/Thanks for watching/gi, '');
+  text = text.replace(/Please subscribe/gi, '');
+  text = text.replace(/Civilization/gi, '');
+  text = text.replace(/Subtitle by/gi, '');
+  text = text.replace(/Amara.org/gi, '');
+  text = text.replace(/Recording of a natural/gi, '');
+  text = text.replace(/conversation\./gi, '');
 
   // Remove repeated words (2+ repetitions in a row)
   text = text.replace(/\b(\w+)(\s+\1){1,}/gi, '$1');

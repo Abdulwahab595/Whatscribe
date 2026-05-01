@@ -9,7 +9,7 @@ const LANGUAGE_KEY = 'transcription_language';
 export type PlanType = 'free' | 'starter' | 'premium';
 
 const LIMITS: Record<PlanType, number> = {
-  free: 180,
+  free: Infinity,
   starter: 1200,
   premium: Infinity,
 };
@@ -56,7 +56,7 @@ export function getUsageSeconds(): number {
 
 // 'auto' = let Whisper detect, or a BCP-47 code like 'ur', 'en', 'ar'
 export function getLanguagePreference(): string {
-  return storage.getString(LANGUAGE_KEY) ?? 'auto';
+  return storage.getString(LANGUAGE_KEY) ?? 'ur';
 }
 
 export function setLanguagePreference(lang: string): void {

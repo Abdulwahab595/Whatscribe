@@ -36,7 +36,7 @@ export default function TranscriptDropdown({summary}: TranscriptDropdownProps) {
     <View style={styles.container}>
       <TouchableOpacity onPress={toggle} style={styles.toggle}>
         <Text style={styles.toggleText}>
-          {expanded ? 'Hide transcript' : 'Show full transcript'}
+          {expanded ? 'Hide original transcript' : 'See original transcript'}
         </Text>
         <Ionicons
           name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'}

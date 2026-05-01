@@ -1,93 +1,111 @@
-import React, { useState, useRef } from 'react';
+import React, {useState, useRef} from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  FlatList,
-  Image,
   Dimensions,
   TouchableOpacity,
   StatusBar,
-  Animated,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import type { StackNavigationProp } from '@react-navigation/stack';
+import {useNavigation} from '@react-navigation/native';
+import type {StackNavigationProp} from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { RootStackParamList } from '../navigation/AppNavigator';
-import colors from '../theme/colors';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  interpolate,
+  useAnimatedScrollHandler,
+  Extrapolate,
+} from 'react-native-reanimated';
+import LinearGradient from 'react-native-linear-gradient';
 
-const { width, height } = Dimensions.get('window');
+import type {RootStackParamList} from '../navigation/AppNavigator';
+import colors from '../theme/colors';
+import {VoiceWave, AISparkle, PrivacyShield} from '../components/OnboardingAnimations';
+
+const {width, height} = Dimensions.get('window');
 
 type Nav = StackNavigationProp<RootStackParamList, 'Onboarding'>;
 
 const SLIDES = [
   {
     id: '1',
-    title: 'Listen Without Listening',
+    title: 'Listen Without\nListening',
     description: 'Instantly transcribe long voice notes into readable text. No more audio playbacks in public.',
-    image: require('../../assets/onboarding/t_v3.png'),
+    component: VoiceWave,
   },
   {
     id: '2',
-    title: 'Get the Point in Seconds',
-    description: 'Our AI summarizes complex messages into clear, actionable bullet points instantly.',
-    image: require('../../assets/onboarding/s_v3.png'),
+    title: 'Precision AI\nSummaries',
+    description: 'Get the gist in seconds. Our advanced AI highlights key decisions and action items from any conversation.',
+    component: AISparkle,
   },
   {
     id: '3',
-    title: 'Your Privacy Matters',
-    description: "We don't store your data on servers. Your transcriptions stay on your device, safe and sound.",
-    image: require('../../assets/onboarding/p_v2.png'),
+    title: 'Private &\nSecure',
+    description: 'Your data never leaves your device. We use local encryption to keep your transcriptions for your eyes only.',
+    component: PrivacyShield,
   },
 ];
 
+const SlideItem = ({item, index, scrollX}: {item: any; index: number; scrollX: Animated.SharedValue<number>}) => {
+  const animatedTextStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(
+      scrollX.value,
+      [(index - 0.5) * width, index * width, (index + 0.5) * width],
+      [0, 1, 0]
+    );
+    const translateY = interpolate(
+      scrollX.value,
+      [(index - 0.5) * width, index * width, (index + 0.5) * width],
+      [40, 0, 40]
+    );
+    return {opacity, transform: [{translateY}]};
+  });
+
+  const animatedImageStyle = useAnimatedStyle(() => {
+    const scale = interpolate(
+      scrollX.value,
+      [(index - 1) * width, index * width, (index + 1) * width],
+      [0.6, 1, 0.6]
+    );
+    return {
+      transform: [{scale}]
+    };
+  });
+
+  return (
+    <View style={styles.slide}>
+      <Animated.View style={[styles.visualContainer, animatedImageStyle]}>
+        <item.component />
+      </Animated.View>
+      <Animated.View style={[styles.textContainer, animatedTextStyle]}>
+        <Text style={styles.title}>{item.title}</Text>
+        <Text style={styles.description}>{item.description}</Text>
+      </Animated.View>
+    </View>
+  );
+};
+
 export default function OnboardingScreen() {
   const navigation = useNavigation<Nav>();
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const scrollX = useRef(new Animated.Value(0)).current;
-  const slidesRef = useRef<FlatList>(null);
+  const scrollX = useSharedValue(0);
+  const flatListRef = useRef<Animated.FlatList<any>>(null);
 
-  const viewableItemsChanged = useRef(({ viewableItems }: any) => {
-    setCurrentIndex(viewableItems[0].index);
-  }).current;
-
-  const viewConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollX.value = event.contentOffset.x;
+    },
+  });
 
   async function handleFinish() {
     await AsyncStorage.setItem('HAS_ONBOARDED', 'true');
     navigation.replace('Home');
   }
 
-  function handleNext() {
-    if (currentIndex < SLIDES.length - 1) {
-      slidesRef.current?.scrollToIndex({ index: currentIndex + 1 });
-    } else {
-      handleFinish();
-    }
-  }
-
-  const Pagination = () => {
-    return (
-      <View style={styles.paginationContainer}>
-        {SLIDES.map((_, i) => {
-          const isActive = i === currentIndex;
-          return (
-            <View
-              key={i}
-              style={[
-                styles.dot,
-                isActive && styles.dotActive,
-              ]}
-            />
-          );
-        })}
-      </View>
-    );
-  };
-
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
       
       <TouchableOpacity 
         style={styles.skipBtn} 
@@ -95,42 +113,64 @@ export default function OnboardingScreen() {
         <Text style={styles.skipText}>Skip</Text>
       </TouchableOpacity>
 
-      <FlatList
+      <Animated.FlatList
+        ref={flatListRef}
         data={SLIDES}
-        renderItem={({ item }) => (
-          <View style={styles.slide}>
-            <View style={styles.imageContainer}>
-              <Image source={item.image} style={styles.image} resizeMode="contain" />
-            </View>
-            <View style={styles.textContainer}>
-              <Text style={styles.title}>{item.title}</Text>
-              <Text style={styles.description}>{item.description}</Text>
-            </View>
-          </View>
+        renderItem={({item, index}) => (
+          <SlideItem item={item} index={index} scrollX={scrollX} />
         )}
         horizontal
         showsHorizontalScrollIndicator={false}
         pagingEnabled
         bounces={false}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         keyExtractor={(item) => item.id}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
-          useNativeDriver: false,
-        })}
-        onViewableItemsChanged={viewableItemsChanged}
-        viewabilityConfig={viewConfig}
-        ref={slidesRef}
       />
 
       <View style={styles.footer}>
-        <Pagination />
+        <View style={styles.pagination}>
+          {SLIDES.map((_, i) => {
+            const dotStyle = useAnimatedStyle(() => {
+              const dotWidth = interpolate(
+                scrollX.value,
+                [(i - 1) * width, i * width, (i + 1) * width],
+                [8, 24, 8],
+                Extrapolate.CLAMP
+              );
+              const opacity = interpolate(
+                scrollX.value,
+                [(i - 1) * width, i * width, (i + 1) * width],
+                [0.3, 1, 0.3],
+                Extrapolate.CLAMP
+              );
+              return {width: dotWidth, opacity};
+            });
+            return <Animated.View key={i} style={[styles.dot, dotStyle]} />;
+          })}
+        </View>
 
         <TouchableOpacity 
           style={styles.nextBtn} 
-          onPress={handleNext}
+          onPress={() => {
+            const nextIndex = Math.round(scrollX.value / width) + 1;
+            if (nextIndex < SLIDES.length) {
+              flatListRef.current?.scrollToIndex({index: nextIndex});
+            } else {
+              handleFinish();
+            }
+          }}
           activeOpacity={0.8}>
-          <Text style={styles.nextBtnText}>
-            {currentIndex === SLIDES.length - 1 ? 'Get Started' : 'Next'}
-          </Text>
+          <LinearGradient
+            colors={['#4F7FFF', '#3A5FCC']}
+            style={styles.nextBtnGradient}
+            start={{x: 0, y: 0}}
+            end={{x: 1, y: 0}}
+          >
+            <Text style={styles.nextBtnText}>
+              {scrollX.value >= (SLIDES.length - 1.5) * width ? 'Get Started' : 'Next'}
+            </Text>
+          </LinearGradient>
         </TouchableOpacity>
       </View>
     </View>
@@ -144,89 +184,87 @@ const styles = StyleSheet.create({
   },
   skipBtn: {
     position: 'absolute',
-    top: 50,
-    right: 30,
+    top: 60,
+    right: 24,
     zIndex: 10,
-    padding: 10,
+    padding: 8,
   },
   skipText: {
-    fontSize: 16,
+    fontSize: 15,
     color: colors.textSecondary,
     fontWeight: '600',
+    letterSpacing: 0.5,
   },
   slide: {
     width,
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 30,
+    justifyContent: 'flex-start',
+    paddingTop: height * 0.1,
   },
-  imageContainer: {
-    flex: 0.6,
-    justifyContent: 'center',
-  },
-  image: {
+  visualContainer: {
     width: width * 0.8,
     height: width * 0.8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
   },
   textContainer: {
-    flex: 0.4,
     width: '100%',
     alignItems: 'center',
+    paddingHorizontal: 32,
+    marginTop: 0, 
   },
   title: {
     fontSize: 28,
     fontWeight: '800',
     color: colors.textPrimary,
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
+    lineHeight: 36,
   },
   description: {
     fontSize: 16,
     color: colors.textSecondary,
     textAlign: 'center',
-    paddingHorizontal: 20,
     lineHeight: 24,
+    paddingHorizontal: 10,
   },
   footer: {
-    height: height * 0.2,
-    justifyContent: 'center',
-    paddingHorizontal: 30,
+    position: 'absolute',
+    bottom: 50,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 32,
     alignItems: 'center',
   },
-  paginationContainer: {
+  pagination: {
     flexDirection: 'row',
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 20,
   },
   dot: {
     height: 8,
-    width: 8,
     borderRadius: 4,
-    backgroundColor: '#E2E8F0',
-    marginHorizontal: 5,
-  },
-  dotActive: {
-    width: 24,
     backgroundColor: colors.primaryBlue,
+    marginHorizontal: 4,
   },
   nextBtn: {
-    backgroundColor: colors.primaryBlue,
     width: '100%',
-    height: 56,
-    borderRadius: 16,
+    height: 58,
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+  nextBtnGradient: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
-    shadowColor: colors.primaryBlue,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
   },
   nextBtnText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: '700',
+    letterSpacing: 0.5,
   },
 });

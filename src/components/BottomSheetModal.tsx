@@ -57,6 +57,7 @@ export default function BottomSheetModal({
   const [bullets, setBullets] = useState<string[]>([]);
   const [fullSummary, setFullSummary] = useState('');
   const [fullTranslation, setFullTranslation] = useState('');
+  const [romanTranscript, setRomanTranscript] = useState('');
   const [readSeconds, setReadSeconds] = useState(5);
   const [errorMsg, setErrorMsg] = useState('');
   const [limitModalVisible, setLimitModalVisible] = useState(false);
@@ -134,6 +135,7 @@ export default function BottomSheetModal({
       setBullets(summary.bullets);
       setFullSummary(summary.fullSummary);
       setFullTranslation(summary.fullTranslation);
+      setRomanTranscript(summary.romanTranscript ?? '');
       setReadSeconds(summary.readSeconds);
 
       addUsage(duration);
@@ -273,7 +275,7 @@ export default function BottomSheetModal({
                   {readSeconds} sec
                 </Text>
                 <BulletPoints bullets={bullets} />
-                <TranscriptDropdown summary={fullSummary} />
+                <TranscriptDropdown summary={romanTranscript || transcript} />
 
                 {realDuration > 180 && (
                   <TouchableOpacity
@@ -344,7 +346,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingHorizontal: 24,
-    paddingBottom: 40,
+    paddingBottom: 16,
     paddingTop: 12,
   },
   handle: {
@@ -408,7 +410,7 @@ const styles = StyleSheet.create({
   actionBar: {
     flexDirection: 'row',
     alignSelf: 'stretch',
-    marginTop: 20,
+    marginTop: 12,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
