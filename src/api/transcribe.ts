@@ -17,6 +17,12 @@ console.log('Groq Token loaded:', GROQ_API_KEY ? 'YES' : 'NO — check .env');
  * non-Urdu phonemes mid-sentence and truncate the transcript.
  * Auto-detect lets Whisper pick the closest model branch per segment,
  * giving a complete transcript that the LLM then translates.
+
+Have to add in prompt (Asad)
+ CRITICAL RULE:
+- NEVER modify proper nouns (names, places, brands, people)
+- If unsure, KEEP ORIGINAL WORD EXACTLY
+- Do NOT “correct” names based on context
  */
 const WHISPER_LANG_MAP: Record<string, string | null> = {
   auto: null, // pure auto-detect
